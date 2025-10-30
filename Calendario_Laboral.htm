@@ -1,0 +1,1509 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="author" content="Oscar Unzueta salazar" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Control de fichajes</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" />
+<style>
+  :root{
+    --bg:#0b1020;--card:#111834;--muted:#98a2b3;--text:#e6e8ee;--accent:#7c5cff;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444;
+    --holiday:#0ea5e9;--vac:#22c55e;--worked:#7c5cff;--weekend:#1b2447;--blank:#ffffff;
+  }
+  html,body{height:100%}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Inter,Arial;background:var(--bg);color:var(--text)}
+  .wrap{max-width:1200px;margin:18px auto;padding:0 14px}
+  h1{font-size:22px;margin:0 0 12px}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .card{background:var(--card);border:1px solid rgba(124,92,255,.25);border-radius:14px;padding:14px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+  .card h2{font-size:16px;margin:0 0 10px}
+  .card h3{font-size:14px;margin:8px 0}
+  .grow{flex:1 1 320px}
+  .muted{color:var(--muted)}
+  label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
+  input[type="number"],input[type="text"],input[type="date"],select{width:100%;padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:#0f1630;color:var(--text)}
+  .inputs{display:grid;grid-template-columns:repeat(6, minmax(120px,1fr));gap:8px}
+  .btn{appearance:none;border:0;border-radius:10px;padding:9px 12px;background:var(--accent);color:white;cursor:pointer}
+  .btn.secondary{background:#334155}
+  .btn:disabled{opacity:.6;cursor:not-allowed}
+  .drop{border:2px dashed rgba(255,255,255,.25);border-radius:12px;padding:18px;text-align:center}
+  .drop.drag{background:rgba(124,92,255,.08)}
+  .grid-two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .kpi .box{background:#0f1630;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px}
+  .kpi .box b{display:block;font-size:18px}
+  table{width:100%;border-collapse:collapse}
+  th,td{border:1px solid rgba(255,255,255,.1);padding:6px 8px;font-size:12px}
+  th{background:#0f1630}
+  .mono{font-variant-numeric:tabular-nums}
+  .badge{display:inline-block;padding:2px 6px;border-radius:999px;font-size:11px}
+  .b-vac{background:rgba(34,197,94,.15);color:#a7f3d0}
+  .b-hol{background:rgba(14,165,233,.2);color:#bae6fd}
+  .b-ret{background:rgba(245,158,11,.15);color:#fde68a}
+  .b-miss{background:rgba(255,255,255,.15);color:#fff}
+
+  /* Calendario anual */
+  .year{display:grid;grid-template-columns:repeat(3, 1fr);gap:10px}
+  .month{background:#0f1630;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:8px}
+  .month h4{margin:0 0 6px;font-size:13px;text-align:center}
+  .cal{display:grid;grid-template-columns:repeat(7, 1fr);gap:2px}
+  .cal .dow{font-size:11px;color:var(--muted);text-align:center}
+  .cell{height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;position:relative}
+  .cell.wknd{background:var(--weekend)}
+  //.cell.holiday{outline:2px solid var(--holiday)}
+  .cell.holiday{ outline:2px solid #ef4444 }
+  .cell.vac{background:rgba(34,197,94,.2)}
+  .cell.worked{background:rgba(124,92,255,.2)}
+  .cell.blank{background:transparent;cursor:default}
+  .cell.missing{background:transparent;outline:1px dashed rgba(255,255,255,.35)}
+  .cell.neutral{background:rgba(14,165,233,.08);outline:2px dashed rgba(14,165,233,.6)}
+  .cell .flag{position:absolute;transform:translate(9px,-9px);font-size:10px}
+  .legend{display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+  .legend .dot{width:10px;height:10px;border-radius:2px;display:inline-block;vertical-align:middle;margin-right:4px}
+  .dot-worked{background:rgba(124,92,255,.6)}
+  .dot-vac{background:rgba(34,197,94,.6)}
+  .dot-hol{background:rgba(14,165,233,.8)}
+  .dot-miss{background:transparent;border:1px dashed rgba(255,255,255,.5)}
+  .dot-wknd{background:var(--weekend)}
+  .dot-neutral{background:rgba(14,165,233,.08);border:1px dashed rgba(14,165,233,.6)}
+
+  /* Modal simple */
+  .modal{position:fixed;inset:0;display:none;place-items:center;background:rgba(0,0,0,.5)}
+  .modal .card{max-width:520px;width:92%}
+  .modal.show{display:grid}
+  
+  
+  #modalHelp .card{max-width:720px}
+
+  
+  
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Control de fichajes</h1>
+
+    <div class="row">
+      <div class="card grow">
+        <h2>1) Cargar fichero</h2>
+        <div class="row">
+          <input id="file" type="file" accept=".xls,.xlsx" />
+          <button id="btnDemo" class="btn secondary" type="button">Instrucciones</button>
+        </div>
+        <div id="drop" class="drop" style="margin-top:10px">Arrastra aquí tu Excel (.xls/.xlsx) o usa el selector.</div>
+      </div>
+
+      <div class="card grow">
+        <h2>2) Parámetros (editables)</h2>
+        <div class="inputs">
+          <label>Canosos <input id="p_can" type="number" min="0" step="1" value="6"></label>
+          <label>AP antigüedad <input id="p_ap" type="number" min="0" step="1" value="4"></label>
+          <label>Vacaciones <input id="p_vac" type="number" min="0" step="1" value="26"></label>
+          <label>Puentes <input id="p_pue" type="number" min="0" step="1" value="7"></label>
+          <label>Asuntos part. <input id="p_asp" type="number" min="0" step="1" value="6"></label>
+          <label>Bajas <input id="p_baj" type="number" min="0" step="1" value="0"></label>
+        </div>
+		
+		<div class="card grow">
+  <h2>Horario laboral (editables)</h2>
+  <div class="inputs">
+    <label>Entrada desde
+      <input id="h_in_start" type="time" value="07:00">
+    </label>
+    <label>Entrada hasta
+      <input id="h_in_limit" type="time" value="08:30">
+    </label>
+    <label>Salida desde
+      <input id="h_out_start" type="time" value="14:00">
+    </label>
+    <label>Salida hasta
+      <input id="h_out_end" type="time" value="16:00">
+    </label>
+  </div>
+  <p class="muted" style="margin-top:6px">La jornada estándar sigue siendo 7h30. Estos campos solo ajustan ventana 07:00–16:00 y el límite de retraso.</p>
+</div>	
+      
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="card grow">
+        <h2>Resumen</h2>
+        <div id="ident" class="muted">Nombre: — · Periodo: —</div>
+
+        <div class="kpi" style="margin-top:8px">
+          <div class="box"><label>Vacaciones/Permisos gastados</label><b id="k_vac">0 días</b></div>
+          <div class="box"><label>Vacaciones/Permisos restantes</label><b id="k_vac_left">0 días</b></div>
+          <div class="box"><label>Días trabajados</label><b id="k_days">0</b></div>
+          <div class="box"><label>Horas reales trabajadas</label><b id="k_hours">0:00</b></div>
+          <div class="box"><label>Retraso total acumulado</label><b id="k_late">0 min</b></div>
+          <div class="box"><label>Días laborales restantes del año</label><b id="k_days_left">0</b></div>
+          <div class="box"><label>Horas restantes del año</label><b id="k_hours_left">0:00</b></div>  
+		<div class="box"><label>Exceso acumulado</label><b id="k_overtime">0 min</b></div>
+		<div class="box"><label>Días con falta de fichaje</label><b id="k_missing">0</b></div>
+		  <div class="box"><label>Déficit acumulado</label><b id="k_deficit">0 min</b></div>
+		  <div class="box"><label>Saldo acumulado</label><b id="k_saldo">0 min</b></div>
+		  
+        </div>
+        <div style="margin-top:10px">
+          <canvas id="chart" height="120"></canvas>
+        </div>
+        <div style="margin-top:10px">
+          <canvas id="chartVac" height="140"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="card grow">
+        <h2>Calendario anual</h2>
+        <div class="legend" style="margin-bottom:6px">
+          <span><span class="dot dot-worked"></span>Trabajado</span>
+          <span><span class="dot dot-vac"></span>Vacaciones/Permisos</span>
+          <span><span class="dot dot-hol"></span>Festivo oficial</span>
+          <span><span class="dot dot-neutral"></span>Neutro (82 / 8V)</span>
+        
+          <span><span class="dot dot-wknd"></span>Finde</span>
+          <span class="muted">R = retraso · F = falta</span>
+        </div>
+        <div id="year" class="year"></div>
+      </div>
+    </div>
+
+
+<div style="margin:6px 0 8px; display:flex; gap:16px; flex-wrap:wrap; align-items:center">
+  <label><input id="hideFest" type="checkbox"> Ocultar findes/festivos</label>
+  <label><input id="hideVac" type="checkbox"> Ocultar vacaciones/neutros</label>
+  <label><input id="showDef" type="checkbox"> Ver solo días con déficit</label>
+  <label><input id="showLate" type="checkbox"> Ver solo días con retrasos</label>
+  <label><input id="showMiss" type="checkbox"> Ver solo días con falta fichaje</label>
+</div>
+
+
+    <div class="row">
+      <div class="card grow">
+        <h2>Detalle</h2>
+        <div style="max-height:400px;overflow:auto">
+          <table id="tbl"><thead></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  
+  
+<div class="row">
+  <div class="card grow">
+    <h2>Exportar</h2>
+    <button id="btnCsv" class="btn" type="button">Descargar CSV</button>
+    <p class="muted" style="margin-top:6px">Incluye fecha, entrada/salida, minutos en horario, retraso, exceso, déficit, códigos, horas acumuladas, y acumulados de retraso/exceso/déficit.</p>
+  </div>
+</div>
+
+ 
+
+  <!-- Modal día -->
+  <div id="modal" class="modal">
+    <div class="card">
+      <h3>Detalle</h3>
+      <div id="modalBody" class="muted">—</div>
+      <div style="display:flex;justify-content:end;margin-top:10px"><button id="closeModal" class="btn secondary">Cerrar</button></div>
+    </div>
+  </div>
+
+
+
+<!-- Modal de instrucciones -->
+<div id="modalHelp" class="modal">
+  <div class="card">
+    <h3>Instrucciones de uso</h3>
+    <div id="helpBody" class="muted" style="max-height:60vh;overflow:auto;line-height:1.55">
+      <p><b>Cómo usar la aplicación</b></p>
+      <p>1) Carga tu Excel (.xls/.xlsx) con los fichajes.<br>
+         2) Ajusta si quieres los parámetros de vacaciones y el horario laboral.<br>
+         3) Revisa el resumen y el calendario. Haz clic en un día o en el nombre de un mes para ver detalles.</p>
+      <p><b>Notas</b>: Las horas se computan solo dentro del horario laboral configurado.
+         Los días con códigos 82/8V (neutros) no gastan vacaciones.</p>
+      
+	  
+	  
+	  
+	  
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+      <button id="closeHelp" class="btn secondary" type="button">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  <!-- SheetJS y Chart.js desde CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+  // ========= Utilidades =========
+    
+  function vacCatToLabel(cat){
+  switch(cat){
+    case 'VAC': return 'Vacaciones';
+    case 'PUE': return 'Puentes';
+    case 'ASP': return 'Asuntos propios';
+    case 'CAN': return 'Canosos';
+    case 'CEX': return 'Canosos extra';
+    default:    return null;
+  }
+}
+
+  
+  function hasRealFichaje(o) {
+  return o.entrada != null && o.salida != null && o.salida > o.entrada;
+}
+
+  
+  
+  const pad = n => String(n).padStart(2,'0');
+  const fmtDMY = d => `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
+  const toMinutes = (hhmm) => {
+    if(hhmm==null) return null;
+    if(typeof hhmm === 'number') { return Math.round(hhmm*24*60); }
+    const s = String(hhmm).trim(); if(!s || s==='00:00') return 0;
+    const m = s.match(/(\d{1,2}):(\d{2})/); if(!m) return null;
+    return parseInt(m[1],10)*60 + parseInt(m[2],10);
+  };
+  const fromMinutes = (min) => { const sign = min < 0 ? '-' : ''; const a = Math.abs(min|0); return `${sign}${pad(Math.floor(a/60))}:${pad(a%60)}`; };
+  const HOLIDAYS = (year) => new Set([
+    `01/01/${year}`,`06/01/${year}`,
+    `17/04/${year}`,`18/04/${year}`,`21/04/${year}`,`28/04/${year}`,
+    `01/05/${year}`,`02/05/${year}`,`25/07/${year}`,
+    `04/08/${year}`,`05/08/${year}`,`15/08/${year}`,
+    `08/12/${year}`,`24/12/${year}`,`25/12/${year}`,`31/12/${year}`
+  ]);
+  const isWeekend = d => [0,6].includes(d.getDay());
+
+  // ========= Códigos / clasificación =========
+  const CODE_MAP = {
+    "00":"EUSKERA DIARIO","01":"HORAS DE ASAMBLEA","02":"LACTANCIA DIARIA","10":"HORA EXTRA NORMAL","11":"HORA EXTRA FESTIVA O NOCTURNA","12":"HORA COMPENSADAS","13":"HORA COMPENSADAS NOCTURNAS","14":"HORA COMPENSADAS FESTIVAS","15":"HORAS DE DEDICACION","16":"HORAS DE EUSKERA ACUMULADAS",
+    "8A":"BAJA ACCIDENTE","8B":"MATRIMONIO DE UN FAMILIAR","8C":"EXCEDENCIA","8D":"CANOSOS (trienios)","8E":"BAJA ENFERMEDAD","8F":"FALLECIMIENTO PADRE ETC. (3)","8G":"FALLECIMIENTO CÓNYUGE E HIJOS","8H":"FALLECIMIENTO FAM. POLÍTICOS","8I":"DEBERES INEXCUSABLES","8J":"ENFERMEDAD FAMILIARES","8K":"ENFERMEDAD CÓNYUGE","8L":"LIBERADOS ACTIVIDAD SINDICAL","8M":"MATERNIDAD Y ADOPCIÓN","8N":"CONSULTAS MÉDICAS","8O":"HORAS SINDICALES","8P":"ASUNTOS PARTICULARES","8Q":"DÍAS ADIC. POR TRIENIOS","8S":"PERMISO SIN SUELDO","8U":"HUELGA","8V":"VIAJES/JORNADAS","8W":"ADOPCIÓN","8X":"ESTUDIOS","8Y":"ESTUDIOS RELAC. F. PÚBLICA","8Z":"ASISTENCIA A CURSOS",
+    "80":"VACACIONES","81":"PUENTES","82":"VACACIONES AÑO ANTERIOR","83":"HORAS/DÍAS DISFRUTADOS","84":"HORAS DE EUSKERA DISFRUTADAS","85":"MATRIMONIO","86":"INICIO CONVIVENCIA","87":"TRASLADO DOMICILIO","88":"PATERNIDAD","89":"LACTANCIA ACUMULADA",
+    "91":"CRÉDITO HORAS COMPENSADAS","92":"REDUCCIÓN","93":"DEDICACIÓN","94":"HORAS EXTRAS","96":"FALTA DE FICHAJE NO RESUELTO"
+  };
+
+
+  const VACATION_LIKE_CODES = new Set(["80","81","82","85","86","87","88","89","8A","8B","8C","8D","8E","8F","8G","8H","8I","8J","8K","8L","8M","8N","8O","8P","8Q","8S","8U","8V","8W","8X","8Y","8Z"]);
+  const NEUTRAL_CODES = new Set(["82","8V"]); // NO gastan ni restan; no son falta
+  const JUSTIF_ABSENCE_CODES = new Set([...VACATION_LIKE_CODES, ...NEUTRAL_CODES]);
+  const MISSING_CODE = "96";
+
+  // Categorías que SÍ gastan
+  const CAT_VAC = new Set(["80"]);      // 82 es neutral
+  const CAT_PUE = new Set(["81"]);
+  const CAT_ASP = new Set(["8P"]);
+  const CAT_CAN = new Set(["8Q"]);
+  const CAT_CEX = new Set(["8D"]);
+
+  // Helpers de texto/códigos
+  const rowText = (row) => Array.isArray(row) ? row.map(x=>String(x??'').trim()).filter(Boolean).join(' ') : '';
+ // Acepta: string o array (fila completa del XLS)
+function extractIncCodes(src){
+  const out = new Set();
+
+  // 1) Si viene una FILA (array), recorre cada celda
+  if (Array.isArray(src)) {
+    for (const cell of src) {
+      const s0 = String(cell ?? '').toUpperCase();
+      // normaliza “8 D”, “8- D”, “8 -D”, etc.
+      const s = s0.replace(/\b8[\s\-]+([A-Z0-9])\b/g, '8$1');
+      // busca 8D / 80 / 8Q...
+      const m = s.match(/\b8[A-Z0-9]\b/g);
+      if (m) m.forEach(code => { if (CODE_MAP[code]) out.add(code); });
+    }
+    return [...out];
+  }
+
+  // 2) Si viene un TEXTO, normaliza y extrae como antes
+  const sRaw = String(src || '').toUpperCase();
+  const s = sRaw.replace(/\b8[\s\-]+([A-Z0-9])\b/g, '8$1');
+  const m = s.match(/\b8[A-Z0-9]\b/g);
+  if (m) m.forEach(code => { if (CODE_MAP[code]) out.add(code); });
+  return [...out];
+}
+
+  function isVacationLikeFrom(textOrCodes){
+    if (Array.isArray(textOrCodes)) return textOrCodes.some(c => VACATION_LIKE_CODES.has(c));
+    const s = String(textOrCodes||'').toUpperCase();
+    return /(VACACION|VACACIONES|PUENTE|ASUNTOS|PARTICULARES|TRIENIOS|CANOSOS|PERMISO|VIAJES|ADICIONALES|LIB[-\s]?EUS)/.test(s);
+  }
+
+  // ========= Estado global =========
+  let RAW = [];
+  let YEAR = new Date().getFullYear();
+  let NAME = '—';
+  let PERIOD = '—';
+
+  // ========= Lectura Excel =========
+  const fileInput = document.getElementById('file');
+  const drop = document.getElementById('drop');
+  function handleFile(file){
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:""});
+      parseRows(rows);
+    };
+    reader.readAsArrayBuffer(file);
+  }
+  fileInput.addEventListener('change', (e)=>{ if(e.target.files[0]) handleFile(e.target.files[0]); });
+  drop.addEventListener('dragover', (e)=>{e.preventDefault(); drop.classList.add('drag')});
+  drop.addEventListener('dragleave', ()=>drop.classList.remove('drag'));
+  drop.addEventListener('drop', (e)=>{ e.preventDefault(); drop.classList.remove('drag'); const f = e.dataTransfer.files[0]; if(f) handleFile(f); });
+ // document.getElementById('btnDemo').addEventListener('click', ()=>{ alert('Usa el selector o arrastra tu Excel (.xls/.xlsx).'); });
+
+
+// Botón "Instrucciones" → abre modal
+document.getElementById('btnDemo').textContent = 'Instrucciones';
+document.getElementById('btnDemo').onclick = () => {
+  document.getElementById('modalHelp').classList.add('show');
+};
+
+// Cerrar modal de instrucciones
+document.getElementById('closeHelp').addEventListener('click', ()=>{
+  document.getElementById('modalHelp').classList.remove('show');
+});
+// Cerrar al hacer clic fuera de la tarjeta
+document.getElementById('modalHelp').addEventListener('click', (e)=>{
+  if(e.target === e.currentTarget) e.currentTarget.classList.remove('show');
+});
+
+
+
+
+
+  // ========= Parser robusto (con fusión de filas y detección de martes) =========
+  function parseRows(rows){
+    let headerIdx = rows.findIndex(r => r.some(c => String(c).toUpperCase().includes('FECHA')));
+    if (headerIdx === -1) headerIdx = 0;
+
+    const header = rows[headerIdx].map(c => String(c).trim());
+    const findIdx = (cands) => { const H = header.map(h => h.toUpperCase()); for (const cand of cands){ const i = H.findIndex(h => h.includes(cand)); if (i !== -1) return i; } return -1; };
+    const cFecha     = findIdx(['FECHA']);
+    const cEntrada   = findIdx(['ENTRADA','ENTRA']);
+    const cSalida    = findIdx(['SALIDA','SALID']);
+    const cTrabajada = findIdx(['TRABAJADA','TRABAJ','TOTAL DÍA','TOTAL DIA','TOTAL']);
+    const cIncid     = findIdx(['INCID','INCIDENCIA','INC']);
+
+    const parseExcelDate = (cell) => {
+      if (cell == null || cell === '') return null;
+      if (typeof cell === 'number') { const pd = XLSX.SSF.parse_date_code(cell); return new Date(Date.UTC(pd.y, pd.m-1, pd.d)); }
+      const s = String(cell).replace(/^[a-zA-Zñéáíóúç.()\s]*/, '').trim();
+      const m = s.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+      if (m) return new Date(parseInt(m[3],10), parseInt(m[2],10)-1, parseInt(m[1],10));
+      const t = Date.parse(s); return isNaN(t) ? null : new Date(t);
+    };
+    const numOrNull = (min) => (min!=null && min>0) ? min : null;
+    const normEnt = (row) => numOrNull(toMinutes(row?.[cEntrada]));
+    const normSal = (row) => numOrNull(toMinutes(row?.[cSalida]));
+    const hasTimes = (row) => { const e=toMinutes(row?.[cEntrada]), s=toMinutes(row?.[cSalida]), w=toMinutes(row?.[cTrabajada]); return (e!=null && e>0)||(s!=null && s>0)||(w!=null && w>0); };
+    const normWorked = (row, ent, sal) => { const w=toMinutes(row?.[cTrabajada]); if (w!=null && w>0) return w; if (ent!=null && sal!=null) return Math.max(0, sal-ent); return 0; };
+    const hasInc = (row) => { const t=rowText(row); if(!t) return false; if(extractIncCodes(t).length) return true; return /(VACACION|PUENTE|ASUNTOS|PARTICULARES|TRIENIOS|CANOSOS|PERMISO|VIAJES|ADICIONALES|LIB[-\s]?EUS)/i.test(t); };
+
+    RAW = [];
+    let i = headerIdx + 1;
+    while (i < rows.length) {
+      const r = rows[i]; if(!r || r.length===0){ i++; continue; }
+      const dThis = parseExcelDate(r[cFecha]);
+
+      // CASO 1: fila superior con horas/incidencia y la siguiente es la fecha
+      if (!dThis && (hasTimes(r) || hasInc(r)) && i+1 < rows.length) {
+        const rDate = rows[i+1]; const dNext = parseExcelDate(rDate?.[cFecha]);
+        if (dNext) {
+          const ent = normEnt(r); const sal = normSal(r); const worked = normWorked(r, ent, sal);
+          const rBelow = rows[i+2] || [];
+          const incCell = (cIncid>=0) ? (r[cIncid] || rDate[cIncid] || rBelow[cIncid]) : '';
+          const mergedText = [rowText(r), rowText(rDate), rowText(rBelow)].filter(Boolean).join(' ');
+          const codesSet = new Set([
+  ...extractIncCodes(incCell || mergedText),
+  ...extractIncCodes(r),         // <-- fila superior (puede tener “8D” en col. B)
+  ...extractIncCodes(rDate),     // <-- fila de la fecha
+  ...extractIncCodes(rBelow)     // <-- fila siguiente por si es martes/total
+]);
+const codes = [...codesSet];
+
+          RAW.push({
+            date: new Date(dNext.getFullYear(), dNext.getMonth(), dNext.getDate()),
+            entrada: ent, salida: sal, worked,
+            incidencia: incCell || mergedText, incCodes: codes
+          });
+          i += 2; continue;
+        }
+      }
+
+      // CASO 2: fecha aquí, info en la fila superior
+      if (dThis && !(hasTimes(r) || hasInc(r)) && i-1 >= (headerIdx+1)) {
+        const rUp = rows[i-1]; const dUp = parseExcelDate(rUp?.[cFecha]);
+        if (!dUp && (hasTimes(rUp) || hasInc(rUp))) {
+          const ent = normEnt(rUp); const sal = normSal(rUp); const worked = normWorked(rUp, ent, sal);
+          const rBelow = rows[i+1] || [];
+          const incCell = (cIncid>=0) ? (rUp[cIncid] || r[cIncid] || rBelow[cIncid]) : '';
+          const mergedText = [rowText(rUp), rowText(r), rowText(rBelow)].filter(Boolean).join(' ');
+          const codesSet = new Set([
+  ...extractIncCodes(incCell || mergedText),
+  ...extractIncCodes(rUp),
+  ...extractIncCodes(r),
+  ...extractIncCodes(rBelow)
+]);
+const codes = [...codesSet];
+
+          RAW.push({
+            date: new Date(dThis.getFullYear(), dThis.getMonth(), dThis.getDate()),
+            entrada: ent, salida: sal, worked,
+            incidencia: incCell || mergedText, incCodes: codes
+          });
+          i += 1; continue;
+        }
+      }
+
+      // CASO 3: normal (fecha y datos en la misma fila)
+      if (dThis) {
+        const ent = normEnt(r); const sal = normSal(r); const worked = normWorked(r, ent, sal);
+        const rBelow = rows[i+1] || [];
+        const incCell = (cIncid>=0) ? (r[cIncid] || rBelow[cIncid]) : '';
+        const mergedText = [rowText(r), rowText(rBelow)].filter(Boolean).join(' ');
+        const codesSet = new Set([
+  ...extractIncCodes(incCell || mergedText),
+  ...extractIncCodes(r),
+  ...extractIncCodes(rBelow)
+]);
+const codes = [...codesSet];
+
+        RAW.push({
+          date: new Date(dThis.getFullYear(), dThis.getMonth(), dThis.getDate()),
+          entrada: ent, salida: sal, worked,
+          incidencia: incCell || mergedText, incCodes: codes
+        });
+      }
+      i++;
+    }
+
+    // Nombre y periodo
+    try {
+      const headScan = rows.slice(0, 10);
+      for (const r0 of headScan) {
+        if (!Array.isArray(r0)) continue;
+        const j = r0.findIndex(c => String(c).toUpperCase().includes('APELLIDOS'));
+        if (j !== -1) {
+          const val = r0.slice(j+1).find(x => String(x).trim() !== '');
+          if (val) { NAME = String(val).toLowerCase(); break; }
+        }
+      }
+    } catch {}
+
+    if (RAW.length) {
+      YEAR = RAW[0].date.getFullYear();
+      if (!PERIOD || PERIOD === '—') {
+        const minD = RAW.reduce((a,b)=> a.date<b.date ? a : b).date;
+        const maxD = RAW.reduce((a,b)=> a.date>b.date ? a : b).date;
+        PERIOD = `${fmtDMY(minD)} - ${fmtDMY(maxD)}`;
+      }
+    }
+
+    computeAndRender();
+  }
+
+  // ========= Cómputo + render =========
+  
+function computeAndRender(){
+  const params = getParams();
+  const hol = HOLIDAYS(YEAR);
+
+  // === Bolsas configurables (solo categorías que GASTAN) ===
+  const pools = {
+    VAC: +params.p_vac || 0,   // 80 (vacaciones)
+    PUE: +params.p_pue || 0,   // 81 (puentes)
+    ASP: +params.p_asp || 0,   // 8P (asuntos propios)
+    CAN: +params.p_can || 0,   // 8Q (canosos / trienios)
+    CEX: +params.p_ap  || 0    // 8D (canosos extra / AP antig.)
+  };
+  const spent = { VAC:0, PUE:0, ASP:0, CAN:0, CEX:0 };
+
+  // ---- helpers de clasificación (scoped a esta función) ----
+  function getSpendCat(codes, text){
+    const set = new Set(codes||[]);
+    if ([...CAT_VAC].some(c=>set.has(c))) return 'VAC';     // 80
+    if ([...CAT_PUE].some(c=>set.has(c))) return 'PUE';     // 81
+    if ([...CAT_ASP].some(c=>set.has(c))) return 'ASP';     // 8P
+    if ([...CAT_CAN].some(c=>set.has(c))) return 'CAN';     // 8Q (canosos)
+    if ([...CAT_CEX].some(c=>set.has(c))) return 'CEX';     // 8D (canosos extra)
+
+    // Refuerzo por texto
+    const s = String(text||'').toUpperCase()
+      .normalize('NFD').replace(/\p{Diacritic}/gu,'');
+    if (/VACACION/.test(s)) return 'VAC';
+    if (/PUENTE/.test(s))   return 'PUE';
+    if (/ASUNTOS/.test(s))  return 'ASP';
+    if (/(CANOSOS|TRIENIOS|ADICIONALES|ADICIONALES-ANTES|LIB[-\s]?EUS)/.test(s)) return 'CAN';
+    return null;
+  }
+  const isNeutralDay = (codes, text) => {
+    const set = new Set(codes||[]);
+    if ([...NEUTRAL_CODES].some(c => set.has(c))) return true; // 82, 8V
+    const s = String(text||'').toUpperCase()
+      .normalize('NFD').replace(/\p{Diacritic}/gu,'');
+    if (/VACACION(?:ES)?/.test(s) && /(ANO\s*ANTERIOR|ADICION)/.test(s)) return true;
+    if (/\b(VIAJES|JORNADAS)\b/.test(s)) return true;
+    return false;
+  };
+
+  // === 1) Fusionar por fecha ===
+  const byDate = new Map();
+
+  for (const row of RAW){
+    const key = fmtDMY(row.date);
+    const weekend = isWeekend(row.date);
+    const holiday = hol.has(key);
+
+    const ent = (row.entrada != null && row.entrada > 0) ? row.entrada : null;
+    const sal = (row.salida  != null && row.salida  > 0) ? row.salida  : null;
+
+    const incCodes = row.incCodes || [];
+    const incText  = row.incidencia || '';
+
+    const neutral  = isNeutralDay(incCodes, incText);
+    const vacCat   = neutral ? null : getSpendCat(incCodes, incText); // solo categorías que gastan
+
+    // Forzar “vacación para pintar” si hay categoría gastable
+    const forceFromCat = !neutral && (!!vacCat);
+    const vacationPaint = !neutral && (
+      forceFromCat ||
+      (incCodes.length && incCodes.some(c => VACATION_LIKE_CODES.has(c))) ||
+      isVacationLikeFrom(incText)
+    );
+
+    // worked de este registro (preferir el facilitado; si no, E-S)
+    let workedThis = (typeof row.worked === 'number' && row.worked > 0) ? row.worked : 0;
+    if (!workedThis && ent!=null && sal!=null) workedThis = Math.max(0, sal - ent);
+
+    if (!byDate.has(key)){
+      byDate.set(key, {
+        date: row.date,
+        entradaMin: ent,
+        salidaMax:  sal,
+        workedMax:  workedThis,
+        weekend, holiday,
+        neutral,                  // 82/8V o textos VIAJES/JORNADAS, VAC.AÑO ANTERIOR/ADICIÓN
+        vacation: vacationPaint,  // para pintar (no incluye neutrales)
+        vacCat,                   // 'VAC'/'PUE'/'ASP'/'CAN'/'CEX' o null
+        incCodes: new Set(incCodes),
+        rawInc: [incText]
+      });
+    } else {
+      const d = byDate.get(key);
+      if (ent!=null) d.entradaMin = (d.entradaMin==null ? ent : Math.min(d.entradaMin, ent));
+      if (sal!=null) d.salidaMax  = (d.salidaMax==null  ? sal : Math.max(d.salidaMax,  sal));
+      d.workedMax = Math.max(d.workedMax, workedThis);
+      d.neutral   = d.neutral || neutral;
+      d.vacation  = d.vacation || vacationPaint;
+      if (!d.vacCat && vacCat) d.vacCat = vacCat;
+      incCodes.forEach(c=>d.incCodes.add(c));
+      if (incText) d.rawInc.push(incText);
+    }
+  }
+
+  // === 2) dayMap + KPIs ===
+  const dayMap = new Map();
+  let workedDays = 0, totalWorkedMin = 0, lateTotalMin = 0;
+  let overtimeTotalMin = 0;      // exceso acumulado
+  let missingDaysTotal = 0;      // días con falta de fichaje
+  
+  let deficitTotalMin = 0;  //  déficit acumulado
+
+
+  const CLIP_START = 7*60;       // 07:00
+  const CLIP_END   = 16*60;      // 16:00
+  const DAILY_MAX  = 7.5*60;     // 7h30
+  
+
+
+//  total en horario
+let totalWithinMin = 0;
+
+ 
+
+  for (const [key, d] of byDate.entries()){
+  const hasEntrada = d.entradaMin != null;
+  const hasSalida  = d.salidaMax  != null;
+  const hasFichaje = hasEntrada || hasSalida;
+
+  // “vacación final” para pintar: detectada o por categoría (no neutral)
+  const isVacFinal = d.vacation || (!!d.vacCat && !d.neutral);
+
+  // tipo visual con prioridad: neutral > vac > holiday > weekend > worked > missing
+  let type = 'blank';
+  if (d.neutral)            type = 'neutral';
+  else if (isVacFinal)      type = 'vac';
+  else if (d.holiday)       type = 'holiday';
+  else if (d.weekend)       type = 'wknd';
+  else if (hasFichaje)      type = 'worked';
+  else                      type = 'missing';
+
+  // falta (no aplicar si neutral/vac/hol/wknd ni si hay justificación por código)
+  let missing = 'none';
+  const justificada = [...d.incCodes].some(c => JUSTIF_ABSENCE_CODES.has(c));
+  if (!(d.neutral || isVacFinal || d.holiday || d.weekend) && !justificada) {
+    if (!hasEntrada && !hasSalida)      missing = 'ambas';
+    else if (!hasEntrada && hasSalida)  missing = 'entrada';
+    else if (hasEntrada && !hasSalida)  missing = 'salida';
+  }
+
+  // Presencia (E–S) y retraso
+  const worked  = d.workedMax || (hasEntrada && hasSalida ? Math.max(0, d.salidaMax - d.entradaMin) : 0);
+ // const lateRaw = d.entradaMin!=null ? Math.max(0, d.entradaMin - (8*60+30)) : 0;
+  //const late    = Math.min(lateRaw, 240); // máx 4h/día
+  
+  const { in_limit } = getParams();
+const lateRaw = d.entradaMin!=null ? Math.max(0, d.entradaMin - in_limit) : 0;
+const late    = Math.min(lateRaw, 240);
+  
+
+  // Minutos dentro del horario laboral (07:00–16:00) y exceso del día (>7h30)
+  const within   = (hasEntrada && hasSalida) ? computeWithinScheduleMinutes(d.entradaMin, d.salidaMax) : 0;
+  let excessDay  = 0;
+  if (type === 'worked' && hasEntrada && hasSalida) {
+    excessDay = Math.max(0, within - DAILY_MAX);
+    overtimeTotalMin += excessDay;
+  }
+
+  // Contador de días con falta
+  if (missing !== 'none') missingDaysTotal++;
+
+  // Guardar en el mapa del día (para tabla, calendario y modales)
+  dayMap.set(key, {
+    date: d.date,
+    entrada: d.entradaMin,
+    salida:  d.salidaMax,
+    worked,                  // presencia total (E–S)
+    within,                  // minutos dentro del horario 07:00–16:00
+    late,
+    excess: excessDay,       // exceso del día (desde within)
+    weekend: d.weekend,
+    holiday: d.holiday,
+    neutral: d.neutral,
+    vacation: isVacFinal,
+    type,
+    missing,
+    rawInc: d.rawInc.filter(Boolean).join(' · '),
+    incCodes: [...d.incCodes],
+    vacCat: d.vacCat
+  });
+
+  // KPIs acumulados
+  if (type === 'worked') {
+    workedDays      += 1;
+    totalWorkedMin  += worked;   // presencia (se mantiene por si la usas)
+    totalWithinMin  += within;   // ← **usar este para “Horas reales trabajadas”**
+    lateTotalMin    += late;
+  }
+
+  // Gasto real por categoría (neutrales NO gastan)
+  if (!d.neutral && d.vacCat) spent[d.vacCat] += 1;
+   
+  
+ // Déficit del día (solo para días realmente trabajados)
+let defectDay = 0;
+if (type === 'worked' && hasEntrada && hasSalida) {
+  defectDay = computeDayDeficit(d.entradaMin, d.salidaMax, late);
+  deficitTotalMin += defectDay;
+}
+
+  
+
+// Guardar en el mapa del día
+dayMap.set(key, {
+  date: d.date,
+  entrada: d.entradaMin,
+  salida:  d.salidaMax,
+  worked,
+  within,
+  late,
+  excess: excessDay,
+  defect: defectDay,     //  para leerlo en el modal
+  weekend: d.weekend,
+  holiday: d.holiday,
+  neutral: d.neutral,
+  vacation: isVacFinal,
+  type,
+  missing,
+  rawInc: d.rawInc.filter(Boolean).join(' · '),
+  incCodes: [...d.incCodes],
+  vacCat: d.vacCat
+});
+ 
+  
+  
+}
+
+
+  // saldos por categoría y totales
+  const left = {
+    VAC: Math.max(0, pools.VAC - spent.VAC),
+    PUE: Math.max(0, pools.PUE - spent.PUE),
+    ASP: Math.max(0, pools.ASP - spent.ASP),
+    CAN: Math.max(0, pools.CAN - spent.CAN),
+    CEX: Math.max(0, pools.CEX - spent.CEX),
+  };
+  const vacSpentTotal = spent.VAC + spent.PUE + spent.ASP + spent.CAN + spent.CEX;
+  const vacLeft       = Math.max(0, (pools.VAC + pools.PUE + pools.ASP + pools.CAN + pools.CEX) - vacSpentTotal);
+// ================= KPIs & RESTANTES =================
+
+// Helpers de formato (defínelos una sola vez)
+if (typeof WORKDAY_MIN === 'undefined') {
+  var WORKDAY_MIN = 7.5 * 60; // 7h30
+}
+if (typeof minutesToDays !== 'function') {
+  function minutesToDays(min){ return (min / WORKDAY_MIN).toFixed(1); }
+}
+if (typeof setMinAndHours !== 'function') {
+  function setMinAndHours(elId, min){
+    const el = document.getElementById(elId);
+    if (!el) return;
+    const sign = min < 0 ? '-' : '';
+    const abs  = Math.abs(min);
+    el.textContent = `${sign}${abs} min (${sign}${fromMinutes(abs)} h)`;
+  }
+}
+
+// Identidad
+document.getElementById('ident').textContent = `Nombre: ${NAME} · Periodo: ${PERIOD}`;
+
+// Vacaciones gastadas y pendientes (totales)
+document.getElementById('k_vac').textContent      = `${vacSpentTotal} días`;
+document.getElementById('k_vac_left').textContent = `${vacLeft} días`;
+
+// Días trabajados
+document.getElementById('k_days').textContent = `${workedDays}`;
+
+// Horas reales trabajadas (EN HORARIO) + días equivalentes
+document.getElementById('k_hours').textContent =
+  `${fromMinutes(totalWithinMin)} (${minutesToDays(totalWithinMin)} días)`;
+
+// Minutos acumulados con conversión a horas
+setMinAndHours('k_late',     lateTotalMin);
+setMinAndHours('k_overtime', overtimeTotalMin);
+setMinAndHours('k_deficit',  deficitTotalMin);
+
+// Días con falta de fichaje
+document.getElementById('k_missing').textContent = `${missingDaysTotal}`;
+
+// Días/horas restantes hasta 31/12 (laborables sin festivo oficial)
+const today = new Date();
+const until = new Date(YEAR, 11, 31);
+const stillWorkday = (d) => !(isWeekend(d) || HOLIDAYS(YEAR).has(fmtDMY(d)));
+
+let daysLeft = 0;
+for (let d = new Date(today.getFullYear()===YEAR ? today : new Date(YEAR,0,1));
+     d <= until; d.setDate(d.getDate()+1)) {
+  const dd = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  if (dd.getFullYear() !== YEAR) continue;
+  if (stillWorkday(dd)) daysLeft++;
+}
+const hoursLeftMin = daysLeft * WORKDAY_MIN;
+
+// DÍAS REALES RESTANTES = laborables restantes − vacaciones pendientes (todas las categorías)
+const totalVacPending = (typeof left === 'object')
+  ? (left.VAC + left.PUE + left.ASP + left.CAN + left.CEX)
+  : Math.max(0, vacLeft); // fallback si no existe 'left'
+
+const realDaysLeft = Math.max(0, daysLeft - totalVacPending);
+
+// Mostrar días restantes (con reales) y horas restantes (con días equivalentes)
+document.getElementById('k_days_left').textContent  = `${daysLeft} (${realDaysLeft} reales)`;
+document.getElementById('k_hours_left').textContent = `${fromMinutes(hoursLeftMin)} (${minutesToDays(hoursLeftMin)} días)`;
+
+// Saldo acumulado total = excesos − déficits − retrasos
+const saldoTotalMin = overtimeTotalMin - deficitTotalMin - lateTotalMin;
+setMinAndHours('k_saldo', saldoTotalMin);
+
+// ---------------- Renderizados ----------------
+renderTable(Array.from(dayMap.values()));
+renderYear(dayMap);
+renderChart(dayMap);             // línea de horas (usa within)
+renderVacBreakdown(spent, left); // barras gastado vs restante
+
+// Exponer dayMap para exportación CSV
+window.__DAYMAP = dayMap;
+
+// --- NUEVA TARJETA: saldo acumulado total ---
+const saldoBox = document.getElementById('k_saldo');
+if (saldoBox) {
+  setMinAndHours('k_saldo', saldoTotalMin);
+}
+
+
+
+
+  window.__DAYMAP = dayMap; // para exportCsvFromCurrent()
+
+  
+}
+
+
+
+
+
+  function getParams(){
+    return {
+      p_can: +document.getElementById('p_can').value||0,
+      p_ap:  +document.getElementById('p_ap').value||0,
+      p_vac: +document.getElementById('p_vac').value||0,
+      p_pue: +document.getElementById('p_pue').value||0,
+      p_asp: +document.getElementById('p_asp').value||0,
+      p_baj: +document.getElementById('p_baj').value||0,
+    };
+  }
+  ['p_can','p_ap','p_vac','p_pue','p_asp','p_baj'].forEach(id=>{ document.getElementById(id).addEventListener('change', ()=>RAW.length && computeAndRender()); });
+
+  // ========= Tabla =========
+ 
+function hasRealFichaje(o) {
+  return o.entrada != null && o.salida != null && o.salida > o.entrada;
+}
+
+function renderTable(items){
+  const thead = document.querySelector('#tbl thead');
+  const tbody = document.querySelector('#tbl tbody');
+
+  thead.innerHTML = `<tr>
+    <th>Fecha</th>
+    <th>Entrada</th>
+    <th>Salida</th>
+    <th>Presencia</th>
+    <th>En horario</th>
+    <th>Retraso</th>
+    <th>Exceso (±)</th>
+    <th>Déficit</th>
+    <th>Horas acum.</th>
+    <th>Saldo acum.</th>
+    <th>Falta</th>
+    <th>Tipo</th>
+    <th>Cat.</th>
+    <th>Inc.</th>
+  </tr>`;
+
+  // filtros
+  const hideFest = !!document.getElementById('hideFest')?.checked;
+  const hideVac  = !!document.getElementById('hideVac')?.checked;
+  const showDef  = !!document.getElementById('showDef')?.checked;
+  const showLate = !!document.getElementById('showLate')?.checked;
+  const showMiss = !!document.getElementById('showMiss')?.checked;
+
+  let data = items.slice().sort((a,b)=>a.date-b.date);
+
+  // aplicar filtros
+  if (hideFest) data = data.filter(o => !(o.weekend || o.holiday));
+  if (hideVac)  data = data.filter(o => !(o.type==='vac' || o.type==='neutral'));
+  if (showDef)  data = data.filter(o => o.type==='worked' && hasRealFichaje(o) && o.defect>0);
+  if (showLate) data = data.filter(o => o.type==='worked' && (o.late||0)>0);
+  if (showMiss) data = data.filter(o => o.missing && o.missing!=='none');
+
+  // acumulados
+  let cumWithin = 0;  // horas (en horario)
+  let cumSaldo  = 0;  // exceso - déficit - retraso acumulado
+
+  const rows = data
+    .slice(0, 2000)
+    .map(o=>{
+      // presencia total
+      const presencia = fromMinutes(o.worked || 0);
+
+      // minutos dentro del horario laboral
+      const withinMin = (typeof o.within === 'number')
+        ? o.within
+        : computeWithinScheduleMinutes(o.entrada, o.salida);
+      const withinTxt = fromMinutes(withinMin);
+
+      // solo trabajados reales
+      let defectMin = 0;
+      if (o.type === 'worked' && hasRealFichaje(o)) {
+        defectMin = computeDayDeficit(o.entrada, o.salida, o.late || 0);
+      }
+
+      const excessPos = (o.type === 'worked' && hasRealFichaje(o))
+        ? (typeof o.excess === 'number'
+            ? o.excess
+            : computeDayExcess(o.entrada, o.salida))
+        : 0;
+
+      // exceso con signo (sin retraso)
+      const signedExcess = (o.type === 'worked' && hasRealFichaje(o))
+        ? withinMin - (7.5 * 60)
+        : 0;
+      const excessTxt = (signedExcess === 0)
+        ? '0m'
+        : (signedExcess > 0
+            ? `${signedExcess}m`
+            : `<span style="color:#ef4444">-${Math.abs(signedExcess)}m</span>`);
+
+      // acumulados (solo días trabajados reales)
+      if (o.type==='worked' && hasRealFichaje(o)){
+        cumWithin += withinMin;
+        const saldoDia = (excessPos || 0) - (defectMin || 0) - (o.late || 0);
+        cumSaldo += saldoDia;
+      }
+
+      // retraso
+      const lateTxt = o.late>0 ? `${o.late}m` : '—';
+
+      // falta
+      let falta = '—';
+      if (o.missing && o.missing!=='none') {
+        falta = (o.missing==='ambas' ? 'Entrada y salida'
+               : o.missing==='entrada' ? 'Entrada'
+               : 'Salida');
+      }
+
+      // tipo visual
+      const typ = o.type==='vac' ? '<span class="badge b-vac">Vacación/Permiso</span>'
+                : o.type==='holiday' ? '<span class="badge b-hol">Festivo</span>'
+                : o.type==='wknd' ? 'Fin de semana'
+                : o.type==='worked' ? '<span class="badge" style="background:rgba(124,92,255,.25)">Trabajado</span>'
+                : o.type==='neutral' ? '<span class="badge" style="background:rgba(14,165,233,.15);color:#bae6fd">Neutro</span>'
+                : '<span class="badge b-miss">Falta fichaje</span>';
+
+      // categoría
+      const catTxt = o.neutral ? 'NEU' : (o.vacCat || '—');
+
+      // incidencia compacta + tooltip
+      const incCodesTxt = (o.incCodes && o.incCodes.length) ? o.incCodes.join(',') : '—';
+      const incTitle = o.rawInc ? String(o.rawInc).replace(/"/g,'&quot;') : '';
+
+      return `<tr>
+        <td class="mono">${fmtDMY(o.date)}</td>
+        <td class="mono">${o.entrada!=null?fromMinutes(o.entrada):'—'}</td>
+        <td class="mono">${o.salida!=null?fromMinutes(o.salida):'—'}</td>
+        <td class="mono">${presencia}</td>
+        <td class="mono">${withinTxt}</td>
+        <td>${lateTxt}</td>
+        <td class="mono">${excessTxt}</td>
+        <td class="mono">${defectMin>0? `${defectMin}m` : '—'}</td>
+        <td class="mono">${fromMinutes(cumWithin)}</td>
+        <td class="mono">${cumSaldo===0 ? '0m' : (cumSaldo>0? `${cumSaldo}m` : `<span style="color:#ef4444">-${Math.abs(cumSaldo)}m</span>`)}</td>
+        <td>${falta}</td>
+        <td>${typ}</td>
+        <td>${catTxt}</td>
+        <td class="mono" title="${incTitle}">${incCodesTxt}</td>
+      </tr>`;
+    }).join('');
+
+  tbody.innerHTML = rows || '<tr><td colspan="14" class="muted">Sin datos aún</td></tr>';
+}
+
+
+  
+
+  // ========= Calendario =========
+  const modal = document.getElementById('modal');
+  const modalBody = document.getElementById('modalBody');
+  document.getElementById('closeModal').addEventListener('click', ()=>modal.classList.remove('show'));
+  function showModal(html){ modalBody.innerHTML = html; modal.classList.add('show'); }
+
+  function renderYear(dayMap){
+  const yearEl = document.getElementById('year');
+  yearEl.innerHTML = '';
+
+  const months = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                  'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+  for (let m = 0; m < 12; m++){
+    const monthEl = document.createElement('div');
+    monthEl.className = 'month';
+
+    // Título clicable -> resumen mensual
+    monthEl.innerHTML = `
+      <h4 class="month-title" style="cursor:pointer" title="Ver resumen del mes">
+        ${months[m]} ${YEAR}
+      </h4>
+      <div class="cal"></div>
+    `;
+    const cal = monthEl.querySelector('.cal');
+
+    // Click en título del mes
+    const titleEl = monthEl.querySelector('.month-title');
+    if (titleEl){
+      titleEl.addEventListener('click', ()=>{
+        const html = buildMonthSummaryHtml(m, dayMap);  // helper
+        showModal(html);
+      });
+    }
+
+    // Cabecera L M X J V S D (empezando lunes)
+    ['L','M','X','J','V','S','D'].forEach(dow=>{
+      const e = document.createElement('div');
+      e.className = 'dow';
+      e.textContent = dow;
+      cal.appendChild(e);
+    });
+
+    // Desfase para que empiece en lunes
+    const first = new Date(YEAR, m, 1);
+    const startDow = (first.getDay() + 6) % 7; // 0 = lunes
+    for (let i = 0; i < startDow; i++){
+      const e = document.createElement('div');
+      e.className = 'cell blank';
+      cal.appendChild(e);
+    }
+
+    // Días del mes
+    const daysInMonth = new Date(YEAR, m + 1, 0).getDate();
+    for (let d = 1; d <= daysInMonth; d++){
+      const date = new Date(YEAR, m, d);
+      const key  = fmtDMY(date);
+      const info = dayMap.get(key) || {
+        weekend: isWeekend(date),
+        holiday: HOLIDAYS(YEAR).has(key),
+        type: 'blank'
+      };
+
+      const e = document.createElement('div');
+      e.className = 'cell';
+
+      // Clases por tipo
+      if (info.weekend)             e.classList.add('wknd');
+      if (info.holiday)             e.classList.add('holiday'); // CSS ya con contorno rojo
+      if (info.type === 'neutral')  e.classList.add('neutral');
+      if (info.type === 'worked')   e.classList.add('worked');
+      if (info.type === 'vac')      e.classList.add('vac');
+      if (info.type === 'missing')  e.classList.add('missing');
+
+      e.textContent = d;
+
+      // Flag de retraso
+      // Helper para añadir una banderita
+const addFlag = (txt)=>{
+  const f = document.createElement('span');
+  f.className = 'flag';
+  f.textContent = txt;
+  e.appendChild(f);
+};
+
+// Flags de día:
+// 1) Falta + Retraso  -> "F+R"
+// 2) Solo Falta        -> "F"
+// 3) Solo Retraso      -> "R"
+const hasMissing = info.missing && info.missing !== 'none';
+const hasLate = (info.late || 0) > 0;
+
+if (hasMissing && hasLate)      addFlag('F+R');
+else if (hasMissing)            addFlag('F');
+else if (hasLate)               addFlag('R');
+
+
+      // Modal diario
+e.addEventListener('click', ()=>{
+  const vacLabel = vacCatToLabel(info.vacCat);
+  const withinDay = (typeof info.within === 'number')
+    ? info.within
+    : computeWithinScheduleMinutes(info.entrada, info.salida);
+  const lateDay = info.late || 0;
+  const excessDay = (typeof info.excess === 'number')
+    ? info.excess
+    : computeDayExcess(info.entrada, info.salida);
+  // Si no es día trabajado, no mostramos déficit
+  const defectDay = (info.type === 'worked')
+    ? (typeof info.defect === 'number'
+        ? info.defect
+        : computeDayDeficit(info.entrada, info.salida, lateDay))
+    : 0;
+
+  const lines = [
+    `<b>${fmtDMY(date)}</b>`,
+    info.rawInc ? `Incidencia: ${info.rawInc}` : '',
+    vacLabel ? `Tipología: ${vacLabel}` : '',
+    `Entrada: ${info.entrada!=null ? fromMinutes(info.entrada) : '—'}`,
+    `Salida: ${info.salida!=null ? fromMinutes(info.salida) : '—'}`,
+    `Horas de presencia: ${fromMinutes(info.worked || 0)}`,
+    `Horas dentro del horario: ${fromMinutes(withinDay)}`,
+    `Retraso: ${lateDay} min`,
+    `Exceso: ${excessDay} min`,
+    `Déficit: ${defectDay} min`,
+    (info.incCodes && info.incCodes.length)
+      ? `Códigos: ${info.incCodes.join(', ')}`
+      : ''
+  ].filter(Boolean);
+
+  showModal(lines.join('<br>'));
+});
+
+
+      cal.appendChild(e);
+    }
+
+    yearEl.appendChild(monthEl);
+  }
+}
+
+
+  // ========= Gráficos =========
+  
+let chart;
+function renderChart(dayMap){
+  const ctx = document.getElementById('chart');
+  const sorted = Array.from(dayMap.values()).sort((a,b)=>a.date-b.date);
+
+  let cumReal = 0;   // acumulado "en horario"
+  let cumObj  = 0;   // objetivo teórico
+  const labels = [], real = [], obj = [];
+
+  sorted.forEach(o=>{
+    labels.push(fmtDMY(o.date));
+
+    // Objetivo sube solo en laborables no festivos/neutros/vacaciones
+    const isWorkday = !(o.weekend || o.holiday || o.vacation || o.type==='neutral');
+    if (isWorkday) cumObj += 7.5*60;
+
+    // Minutos en horario del día (si no viene guardado, calcúlalo al vuelo)
+    const withinMin = (typeof o.within === 'number')
+      ? o.within
+      : computeWithinScheduleMinutes(o.entrada, o.salida);
+
+    if (o.type === 'worked') cumReal += withinMin;
+
+    real.push(cumReal/60);
+    obj.push(cumObj/60);
+  });
+
+  if(chart) chart.destroy();
+  chart = new Chart(ctx, {
+    type:'line',
+    data:{ labels, datasets:[
+      { label:'Horas reales acumuladas (en horario)', data:real, tension:.25, borderWidth:1, pointRadius:1.5 },
+      { label:'Horas objetivo acumuladas', data:obj, tension:.25, borderDash:[4,4], borderWidth:1, pointRadius:1.5 }
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ position:'bottom', labels:{ boxWidth:12, boxHeight:12, font:{ size:10 } } },
+        tooltip:{
+          mode:'index', intersect:false, titleFont:{ size:10 }, bodyFont:{ size:10 }, padding:6,
+          callbacks:{ label:(ctx)=>`${ctx.dataset.label}: ${ (ctx.parsed.y ?? 0).toFixed(0) } h` }
+        }
+      },
+      scales:{
+        x:{ ticks:{ font:{ size:10 }, maxRotation:0, autoSkip:true } },
+        y:{ ticks:{ font:{ size:10 }, callback:v=>v.toFixed(0) }, grid:{ lineWidth:0.3 } }
+      }
+    }
+  });
+}
+
+
+
+ let chartVac;
+function renderVacBreakdown(spent, left){
+  const ctx = document.getElementById('chartVac');
+  const labels = ['Vacaciones','Puentes','Asuntos propios','Canosos','Canosos extra'];
+  const order  = ['VAC','PUE','ASP','CAN','CEX'];
+  const used   = order.map(k => spent[k]);
+  const rem    = order.map(k => left[k]);
+
+  if(chartVac) chartVac.destroy();
+  chartVac = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        {
+          label:'Gastado',
+          data: used,
+          stack:'s',
+          backgroundColor: '#ef4444',
+          borderColor: '#ef4444',
+          borderWidth: 1
+        },
+        {
+          label:'Restante',
+          data: rem,
+          stack:'s',
+          backgroundColor: '#3b82f6',
+          borderColor: '#3b82f6',
+          borderWidth: 1
+        }
+      ]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,  
+      plugins:{
+        legend:{ position:'bottom', labels:{ boxWidth:12, boxHeight:12, font:{ size:10 } } },
+        tooltip:{
+          mode:'index',
+          intersect:false,
+          titleFont:{ size:10 },
+          bodyFont:{ size:10 },
+          padding:6,
+          callbacks:{
+            // Muestra "Gastado: X" y "Restante: Y"
+            label: (ctx)=>{
+              const v = ctx.parsed.y ?? 0;
+              return `${ctx.dataset.label}: ${v}`;
+            }
+          }
+        }
+      },
+      scales:{
+        x:{ stacked:true, ticks:{ font:{ size:10 } } },
+        y:{ stacked:true, ticks:{ precision:0, font:{ size:10 } }, grid:{ lineWidth:0.3 } }
+      },
+      elements:{ bar:{ borderRadius: 4 } }
+    }
+  });
+}
+
+
+//Helpers para calculo mensual modal
+
+function vacCatToLabel(cat){
+  switch(cat){
+    case 'VAC': return 'Vacaciones';
+    case 'PUE': return 'Puentes';
+    case 'ASP': return 'Asuntos propios';
+    case 'CAN': return 'Canosos';
+    case 'CEX': return 'Canosos extra';
+    default:    return null;
+  }
+}
+
+// Resumen del mes (m = 0..11)
+function buildMonthSummaryHtml(m, dayMap){
+  let workedDays=0, vacDays=0, neutralDays=0, missingDays=0;
+  let totalWithinMin=0, totalLateMin=0, totalExcessMin=0, totalDefectMin=0;
+
+  const daysInMonth = new Date(YEAR, m+1, 0).getDate();
+  for(let d=1; d<=daysInMonth; d++){
+    const date = new Date(YEAR, m, d);
+    const key = fmtDMY(date);
+    const info = dayMap.get(key);
+    if(!info) continue;
+
+    if(info.type === 'worked'){
+      workedDays++;
+
+      const within = (typeof info.within === 'number')
+        ? info.within
+        : computeWithinScheduleMinutes(info.entrada, info.salida);
+
+      const late = info.late || 0;
+
+      const ex = (typeof info.excess === 'number')
+        ? info.excess
+        : computeDayExcess(info.entrada, info.salida);
+
+      const def = (typeof info.defect === 'number')
+        ? info.defect
+        : computeDayDeficit(info.entrada, info.salida, late);
+
+      totalWithinMin += within;
+      totalLateMin   += late;
+      totalExcessMin += ex;
+      totalDefectMin += def;
+    }
+
+    if(info.type === 'vac')     vacDays++;
+    if(info.type === 'neutral') neutralDays++;
+    if(info.missing && info.missing !== 'none') missingDays++;
+  }
+
+  const monthName = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio',
+                     'Agosto','Septiembre','Octubre','Noviembre','Diciembre'][m];
+
+  return `
+    <b>Resumen de ${monthName} ${YEAR}</b><br>
+    <div style="margin-top:8px">
+      <table style="width:100%;border-collapse:collapse">
+        <tr><td style="padding:4px 0">Días trabajados</td><td style="text-align:right">${workedDays}</td></tr>
+        <tr><td>Vacaciones (total)</td><td style="text-align:right">${vacDays}</td></tr>
+        <tr><td>Horas trabajadas (en horario)</td><td style="text-align:right">${fromMinutes(totalWithinMin)}</td></tr>
+        <tr><td>Retraso total</td><td style="text-align:right">${totalLateMin} min</td></tr>
+        <tr><td>Exceso total</td><td style="text-align:right">${totalExcessMin} min</td></tr>
+        <tr><td><b>Déficit total</b></td><td style="text-align:right"><b>${totalDefectMin} min</b></td></tr>
+        <tr><td>Días neutros</td><td style="text-align:right">${neutralDays}</td></tr>
+        <tr><td>Días con falta de fichaje</td><td style="text-align:right">${missingDays}</td></tr>
+      </table>
+    </div>
+  `;
+}
+
+
+const CLIP_START = 7*60;     // 07:00
+const CLIP_END   = 16*60;    // 16:00
+
+const DAILY_MAX = 7.5*60; // 7h30
+
+function computeWithinScheduleMinutes(entradaMin, salidaMin){
+  const { in_start, out_end } = getParams();
+  if (entradaMin == null || salidaMin == null) return 0;
+  const a = Math.max(entradaMin, in_start);
+  const b = Math.min(salidaMin,  out_end);
+  return Math.max(0, b - a);
+}
+
+function computeDayExcess(entradaMin, salidaMin){
+  const within = computeWithinScheduleMinutes(entradaMin, salidaMin);
+  return Math.max(0, within - DAILY_MAX);
+}
+
+function computeDayDeficit(entradaMin, salidaMin, lateMin){
+  if (entradaMin == null || salidaMin == null) return 0;
+  const within = computeWithinScheduleMinutes(entradaMin, salidaMin);
+  const late   = Math.max(0, lateMin || 0);
+  const deficit = DAILY_MAX - (within + late);
+  return deficit > 0 ? deficit : 0;
+}
+
+
+
+
+// HH:MM -> minutos
+function hhmmToMin(v){
+  if(!v) return null;
+  const m = String(v).match(/(\d{1,2}):(\d{2})/);
+  if(!m) return null;
+  return parseInt(m[1],10)*60 + parseInt(m[2],10);
+}
+
+// Extiende getParams con el horario
+function getParams(){
+  return {
+    p_can: +document.getElementById('p_can').value||0,
+    p_ap:  +document.getElementById('p_ap').value||0,
+    p_vac: +document.getElementById('p_vac').value||0,
+    p_pue: +document.getElementById('p_pue').value||0,
+    p_asp: +document.getElementById('p_asp').value||0,
+    p_baj: +document.getElementById('p_baj').value||0,
+    // horario
+    in_start:  hhmmToMin(document.getElementById('h_in_start').value)  ?? 7*60,
+    in_limit:  hhmmToMin(document.getElementById('h_in_limit').value)  ?? 8*60+30,
+    out_start: hhmmToMin(document.getElementById('h_out_start').value) ?? 14*60,
+    out_end:   hhmmToMin(document.getElementById('h_out_end').value)   ?? 16*60,
+  };
+}
+
+// Recalcular al cambiar horario
+['h_in_start','h_in_limit','h_out_start','h_out_end'].forEach(id=>{
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('change', ()=>RAW.length && computeAndRender());
+});
+
+
+
+
+document.getElementById('btnCsv').addEventListener('click', ()=>{
+  if(!RAW.length){ alert('Carga primero un Excel.'); return; }
+  exportCsvFromCurrent();
+});
+
+function exportCsvFromCurrent(){
+  const dayMap = window.__DAYMAP;
+  if(!dayMap){ alert('Recalcula primero (computeAndRender).'); return; }
+
+  const rows = Array.from(dayMap.values()).sort((a,b)=>a.date-b.date);
+
+  // Helpers CSV
+  const SEP = ';';                         // separador "español"
+  const NL  = '\r\n';                      // saltos Windows
+  const esc = s => {
+    const t = (s==null ? '' : String(s))
+      .replace(/\r?\n/g,' ')              // sin saltos dentro de celdas
+      .replace(/"/g,'""')                 // escapar comillas
+      .normalize('NFC');                  // acentos OK
+    return `"${t}"`;
+  };
+
+  let cumHours=0, cumLate=0, cumEx=0, cumDef=0;
+  const out = [];
+
+  // Cabecera
+  out.push([
+    'fecha','hora_entrada','hora_salida',
+    'min_en_horario','min_retraso','min_exceso','min_deficit',
+    'codigo','horas_acumuladas','min_retraso_acum','min_exceso_acum','min_deficit_acum'
+  ].join(SEP));
+
+  rows.forEach(o=>{
+    const within = (typeof o.within === 'number') ? o.within : computeWithinScheduleMinutes(o.entrada, o.salida);
+    const late   = o.late || 0;
+    const excess = (typeof o.excess === 'number') ? o.excess : computeDayExcess(o.entrada, o.salida);
+    const defect = (o.type==='worked')
+      ? ((typeof o.defect === 'number') ? o.defect : computeDayDeficit(o.entrada, o.salida, late))
+      : 0;
+
+    if(o.type==='worked'){
+      cumHours += within;
+      cumLate  += late;
+      cumEx    += excess;
+      cumDef   += defect;
+    }
+
+    // Código + descripción (o FESTIVO)
+    let codeTxt = '';
+    if (o.holiday || o.weekend) {
+      codeTxt = 'FESTIVO';
+    } else if (o.incCodes && o.incCodes.length) {
+      codeTxt = o.incCodes.map(c=>{
+        const desc = CODE_MAP[c] || '';
+        return desc ? `${c} - ${desc}` : c;
+      }).join(' | ');
+    }
+
+    out.push([
+      esc(fmtDMY(o.date)),
+      esc(o.entrada!=null? fromMinutes(o.entrada) : ''),
+      esc(o.salida!=null?  fromMinutes(o.salida)  : ''),
+      esc(within),
+      esc(late),
+      esc(excess),
+      esc(defect),
+      esc(codeTxt),
+      esc(fromMinutes(cumHours)), // HH:MM
+      esc(cumLate),
+      esc(cumEx),
+      esc(cumDef)
+    ].join(SEP));
+  });
+
+  // UTF-8 con BOM para que Excel respete los acentos
+  const csv = '\uFEFF' + out.join(NL);
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `fichajes_${YEAR}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+
+
+['hideFest','hideVac'].forEach(id=>{
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', ()=> window.__DAYMAP && renderTable(Array.from(window.__DAYMAP.values())));
+});
+
+
+
+['hideFest','hideVac','showDef','showLate','showMiss'].forEach(id=>{
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', ()=> window.__DAYMAP && renderTable(Array.from(window.__DAYMAP.values())));
+});
+
+
+
+  </script>
+</body>
+</html>
