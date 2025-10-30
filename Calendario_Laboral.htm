@@ -1412,15 +1412,14 @@ function exportCsvFromCurrent(){
 
   const rows = Array.from(dayMap.values()).sort((a,b)=>a.date-b.date);
 
-  // Helpers CSV
-  const SEP = ';';                         // separador "español"
-  const NL  = '\r\n';                      // saltos Windows
-  const esc = s => {
-    const t = (s==null ? '' : String(s))
-      .replace(/\r?\n/g,' ')              // sin saltos dentro de celdas
-      .replace(/"/g,'""')                 // escapar comillas
-      .normalize('NFC');                  // acentos OK
-    return `"${t}"`;
+  // Config CSV: coma y CRLF; comillas solo si hace falta
+  const SEP = ','; 
+  const NL  = '\r\n';
+  const escMinimal = (v) => {
+    const s = (v==null ? '' : String(v)).normalize('NFC').replace(/\r?\n/g, ' ');
+    // Si contiene coma, comillas o salto, encerramos y duplicamos comillas
+    if (/[",]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
   };
 
   let cumHours=0, cumLate=0, cumEx=0, cumDef=0;
@@ -1460,22 +1459,22 @@ function exportCsvFromCurrent(){
     }
 
     out.push([
-      esc(fmtDMY(o.date)),
-      esc(o.entrada!=null? fromMinutes(o.entrada) : ''),
-      esc(o.salida!=null?  fromMinutes(o.salida)  : ''),
-      esc(within),
-      esc(late),
-      esc(excess),
-      esc(defect),
-      esc(codeTxt),
-      esc(fromMinutes(cumHours)), // HH:MM
-      esc(cumLate),
-      esc(cumEx),
-      esc(cumDef)
+      escMinimal(fmtDMY(o.date)),
+      escMinimal(o.entrada!=null? fromMinutes(o.entrada) : ''),
+      escMinimal(o.salida!=null?  fromMinutes(o.salida)  : ''),
+      escMinimal(within),
+      escMinimal(late),
+      escMinimal(excess),
+      escMinimal(defect),
+      escMinimal(codeTxt),
+      escMinimal(fromMinutes(cumHours)), // HH:MM
+      escMinimal(cumLate),
+      escMinimal(cumEx),
+      escMinimal(cumDef)
     ].join(SEP));
   });
 
-  // UTF-8 con BOM para que Excel respete los acentos
+  // UTF-8 con BOM para que Excel respete los acentos al abrir directo
   const csv = '\uFEFF' + out.join(NL);
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
