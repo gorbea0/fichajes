@@ -102,7 +102,7 @@
           <label>Vacaciones <input id="p_vac" type="number" min="0" step="1" value="26"></label>
           <label>Puentes <input id="p_pue" type="number" min="0" step="1" value="7"></label>
           <label>Asuntos part. <input id="p_asp" type="number" min="0" step="1" value="6"></label>
-         <!-- <label>Bajas <input id="p_baj" type="number" min="0" step="1" value="0"></label> -->
+          <!-- <label>Bajas <input id="p_baj" type="number" min="0" step="1" value="0"></label> -->
         </div>
 		
 		<div class="card grow">
@@ -283,6 +283,30 @@
     `08/12/${year}`,`24/12/${year}`,`25/12/${year}`,`31/12/${year}`
   ]);
   const isWeekend = d => [0,6].includes(d.getDay());
+  
+  
+  
+  const DAILY_MAX = 7.5 * 60; // 450 min
+
+// neutros que deben imputar 7h30 como horas reales
+function isNeutralWorkDay(o){
+  const inc = Array.isArray(o.incCodes) ? o.incCodes.map(String) : [];
+  return o.type === 'neutral' && (inc.includes('82')  || inc.includes('8V') );
+}
+
+// minutos en horario del día, forzando 7h30 en los neutros “laborales”
+function getWithinOrNeutral(o){
+  let within = (typeof o.within === 'number')
+    ? o.within
+    : (o.entrada!=null && o.salida!=null ? computeWithinScheduleMinutes(o.entrada, o.salida) : 0);
+  if (isNeutralWorkDay(o)) within = DAILY_MAX;
+  return within;
+}
+
+  
+  
+  
+  
 
   // ========= Códigos / clasificación =========
   const CODE_MAP = {
@@ -531,27 +555,27 @@ function computeAndRender(){
   };
   const spent = { VAC:0, PUE:0, ASP:0, CAN:0, CEX:0 };
 
-  // ---- helpers de clasificación (scoped a esta función) ----
+  // ---- helpers de clasificación ----
   function getSpendCat(codes, text){
     const set = new Set(codes||[]);
-    if ([...CAT_VAC].some(c=>set.has(c))) return 'VAC';     // 80
-    if ([...CAT_PUE].some(c=>set.has(c))) return 'PUE';     // 81
-    if ([...CAT_ASP].some(c=>set.has(c))) return 'ASP';     // 8P
-    if ([...CAT_CAN].some(c=>set.has(c))) return 'CAN';     // 8Q (canosos)
-    if ([...CAT_CEX].some(c=>set.has(c))) return 'CEX';     // 8D (canosos extra)
+    if ([...CAT_VAC].some(c=>set.has(c))) return 'VAC';
+    if ([...CAT_PUE].some(c=>set.has(c))) return 'PUE';
+    if ([...CAT_ASP].some(c=>set.has(c))) return 'ASP';
+    if ([...CAT_CAN].some(c=>set.has(c))) return 'CAN';
+    if ([...CAT_CEX].some(c=>set.has(c))) return 'CEX';
 
-    // Refuerzo por texto
     const s = String(text||'').toUpperCase()
       .normalize('NFD').replace(/\p{Diacritic}/gu,'');
     if (/VACACION/.test(s)) return 'VAC';
     if (/PUENTE/.test(s))   return 'PUE';
     if (/ASUNTOS/.test(s))  return 'ASP';
-    if (/(CANOSOS|TRIENIOS|ADICIONALES|ADICIONALES-ANTES|LIB[-\s]?EUS)/.test(s)) return 'CAN';
+    if (/(CANOSOS|TRIENIOS|ADICIONALES|LIB[-\s]?EUS)/.test(s)) return 'CAN';
     return null;
   }
+
   const isNeutralDay = (codes, text) => {
     const set = new Set(codes||[]);
-    if ([...NEUTRAL_CODES].some(c => set.has(c))) return true; // 82, 8V
+    if ([...NEUTRAL_CODES].some(c => set.has(c))) return true; // 82 y 8V
     const s = String(text||'').toUpperCase()
       .normalize('NFD').replace(/\p{Diacritic}/gu,'');
     if (/VACACION(?:ES)?/.test(s) && /(ANO\s*ANTERIOR|ADICION)/.test(s)) return true;
@@ -570,13 +594,12 @@ function computeAndRender(){
     const ent = (row.entrada != null && row.entrada > 0) ? row.entrada : null;
     const sal = (row.salida  != null && row.salida  > 0) ? row.salida  : null;
 
-    const incCodes = row.incCodes || [];
+    const incCodes = (row.incCodes || []).map(String);
     const incText  = row.incidencia || '';
 
     const neutral  = isNeutralDay(incCodes, incText);
-    const vacCat   = neutral ? null : getSpendCat(incCodes, incText); // solo categorías que gastan
+    const vacCat   = neutral ? null : getSpendCat(incCodes, incText);
 
-    // Forzar “vacación para pintar” si hay categoría gastable
     const forceFromCat = !neutral && (!!vacCat);
     const vacationPaint = !neutral && (
       forceFromCat ||
@@ -584,7 +607,6 @@ function computeAndRender(){
       isVacationLikeFrom(incText)
     );
 
-    // worked de este registro (preferir el facilitado; si no, E-S)
     let workedThis = (typeof row.worked === 'number' && row.worked > 0) ? row.worked : 0;
     if (!workedThis && ent!=null && sal!=null) workedThis = Math.max(0, sal - ent);
 
@@ -595,9 +617,9 @@ function computeAndRender(){
         salidaMax:  sal,
         workedMax:  workedThis,
         weekend, holiday,
-        neutral,                  // 82/8V o textos VIAJES/JORNADAS, VAC.AÑO ANTERIOR/ADICIÓN
-        vacation: vacationPaint,  // para pintar (no incluye neutrales)
-        vacCat,                   // 'VAC'/'PUE'/'ASP'/'CAN'/'CEX' o null
+        neutral,
+        vacation: vacationPaint,
+        vacCat,
         incCodes: new Set(incCodes),
         rawInc: [incText]
       });
@@ -617,138 +639,102 @@ function computeAndRender(){
   // === 2) dayMap + KPIs ===
   const dayMap = new Map();
   let workedDays = 0, totalWorkedMin = 0, lateTotalMin = 0;
-  let overtimeTotalMin = 0;      // exceso acumulado
-  let missingDaysTotal = 0;      // días con falta de fichaje
-  
-  let deficitTotalMin = 0;  //  déficit acumulado
-
-
-  const CLIP_START = 7*60;       // 07:00
-  const CLIP_END   = 16*60;      // 16:00
-  const DAILY_MAX  = 7.5*60;     // 7h30
-  
-
-
-//  total en horario
-let totalWithinMin = 0;
+  let overtimeTotalMin = 0, missingDaysTotal = 0, deficitTotalMin = 0;
 
  
+  let totalWithinMin = 0;
 
   for (const [key, d] of byDate.entries()){
-  const hasEntrada = d.entradaMin != null;
-  const hasSalida  = d.salidaMax  != null;
-  const hasFichaje = hasEntrada || hasSalida;
+    const hasEntrada = d.entradaMin != null;
+    const hasSalida  = d.salidaMax  != null;
+    const hasFichaje = hasEntrada || hasSalida;
 
-  // “vacación final” para pintar: detectada o por categoría (no neutral)
-  const isVacFinal = d.vacation || (!!d.vacCat && !d.neutral);
+    // detectar si tiene 82 o 8V
+    const inc = d.incCodes || new Set();
+    const isNeutral82or8V = inc.has('82') || inc.has('8V');
 
-  // tipo visual con prioridad: neutral > vac > holiday > weekend > worked > missing
-  let type = 'blank';
-  if (d.neutral)            type = 'neutral';
-  else if (isVacFinal)      type = 'vac';
-  else if (d.holiday)       type = 'holiday';
-  else if (d.weekend)       type = 'wknd';
-  else if (hasFichaje)      type = 'worked';
-  else                      type = 'missing';
+    const isVacFinal = d.vacation || (!!d.vacCat && !d.neutral);
 
-  // falta (no aplicar si neutral/vac/hol/wknd ni si hay justificación por código)
-  let missing = 'none';
-  const justificada = [...d.incCodes].some(c => JUSTIF_ABSENCE_CODES.has(c));
-  if (!(d.neutral || isVacFinal || d.holiday || d.weekend) && !justificada) {
-    if (!hasEntrada && !hasSalida)      missing = 'ambas';
-    else if (!hasEntrada && hasSalida)  missing = 'entrada';
-    else if (hasEntrada && !hasSalida)  missing = 'salida';
+    // tipo visual
+    let type = 'blank';
+    if (d.neutral)            type = 'neutral';
+    else if (isVacFinal)      type = 'vac';
+    else if (d.holiday)       type = 'holiday';
+    else if (d.weekend)       type = 'wknd';
+    else if (hasFichaje)      type = 'worked';
+    else                      type = 'missing';
+
+    // falta de fichaje
+    let missing = 'none';
+    const justificada = [...inc].some(c => JUSTIF_ABSENCE_CODES.has(c));
+    if (!(d.neutral || isVacFinal || d.holiday || d.weekend) && !justificada) {
+      if (!hasEntrada && !hasSalida)      missing = 'ambas';
+      else if (!hasEntrada && hasSalida)  missing = 'entrada';
+      else if (hasEntrada && !hasSalida)  missing = 'salida';
+    }
+
+    // tiempos
+    const worked  = d.workedMax || (hasEntrada && hasSalida ? Math.max(0, d.salidaMax - d.entradaMin) : 0);
+    const { in_limit } = getParams();
+    const lateRaw = d.entradaMin!=null ? Math.max(0, d.entradaMin - in_limit) : 0;
+    const late    = Math.min(lateRaw, 240);
+
+    let within = (hasEntrada && hasSalida)
+      ? computeWithinScheduleMinutes(d.entradaMin, d.salidaMax)
+      : 0;
+
+    // Forzar 7h30 si 82 o 8V
+    if (isNeutral82or8V) within = DAILY_MAX;
+
+    let excessDay = 0;
+    if (type === 'worked' && hasEntrada && hasSalida) {
+      excessDay = Math.max(0, within - DAILY_MAX);
+      overtimeTotalMin += excessDay;
+    }
+
+    if (missing !== 'none') missingDaysTotal++;
+
+    let defectDay = 0;
+    if (type === 'worked' && hasEntrada && hasSalida) {
+      defectDay = computeDayDeficit(d.entradaMin, d.salidaMax, late);
+      deficitTotalMin += defectDay;
+    }
+
+    const dayObj = {
+      date: d.date,
+      entrada: d.entradaMin,
+      salida:  d.salidaMax,
+      worked,
+      within,
+      late,
+      excess: excessDay,
+      defect: defectDay,
+      weekend: d.weekend,
+      holiday: d.holiday,
+      neutral: d.neutral,
+      vacation: isVacFinal,
+      type,
+      missing,
+      rawInc: d.rawInc.filter(Boolean).join(' · '),
+      incCodes: [...inc],
+      vacCat: d.vacCat
+    };
+    dayMap.set(key, dayObj);
+
+    // KPIs
+    if (type === 'worked') {
+      workedDays     += 1;
+      totalWorkedMin += worked;
+      totalWithinMin += within;
+      lateTotalMin   += late;
+    } else if (isNeutral82or8V) {
+      totalWithinMin += DAILY_MAX; // cuentan 7h30 como horas reales
+    }
+
+    if (!d.neutral && d.vacCat) spent[d.vacCat] += 1;
   }
 
-  // Presencia (E–S) y retraso
-  const worked  = d.workedMax || (hasEntrada && hasSalida ? Math.max(0, d.salidaMax - d.entradaMin) : 0);
- // const lateRaw = d.entradaMin!=null ? Math.max(0, d.entradaMin - (8*60+30)) : 0;
-  //const late    = Math.min(lateRaw, 240); // máx 4h/día
-  
-  const { in_limit } = getParams();
-const lateRaw = d.entradaMin!=null ? Math.max(0, d.entradaMin - in_limit) : 0;
-const late    = Math.min(lateRaw, 240);
-  
-
-  // Minutos dentro del horario laboral (07:00–16:00) y exceso del día (>7h30)
-  const within   = (hasEntrada && hasSalida) ? computeWithinScheduleMinutes(d.entradaMin, d.salidaMax) : 0;
-  let excessDay  = 0;
-  if (type === 'worked' && hasEntrada && hasSalida) {
-    excessDay = Math.max(0, within - DAILY_MAX);
-    overtimeTotalMin += excessDay;
-  }
-
-  // Contador de días con falta
-  if (missing !== 'none') missingDaysTotal++;
-
-  // Guardar en el mapa del día (para tabla, calendario y modales)
-  dayMap.set(key, {
-    date: d.date,
-    entrada: d.entradaMin,
-    salida:  d.salidaMax,
-    worked,                  // presencia total (E–S)
-    within,                  // minutos dentro del horario 07:00–16:00
-    late,
-    excess: excessDay,       // exceso del día (desde within)
-    weekend: d.weekend,
-    holiday: d.holiday,
-    neutral: d.neutral,
-    vacation: isVacFinal,
-    type,
-    missing,
-    rawInc: d.rawInc.filter(Boolean).join(' · '),
-    incCodes: [...d.incCodes],
-    vacCat: d.vacCat
-  });
-
-  // KPIs acumulados
-  if (type === 'worked') {
-    workedDays      += 1;
-    totalWorkedMin  += worked;   // presencia (se mantiene por si la usas)
-    totalWithinMin  += within;   // ← **usar este para “Horas reales trabajadas”**
-    lateTotalMin    += late;
-  }
-
-  // Gasto real por categoría (neutrales NO gastan)
-  if (!d.neutral && d.vacCat) spent[d.vacCat] += 1;
-   
-  
- // Déficit del día (solo para días realmente trabajados)
-let defectDay = 0;
-if (type === 'worked' && hasEntrada && hasSalida) {
-  defectDay = computeDayDeficit(d.entradaMin, d.salidaMax, late);
-  deficitTotalMin += defectDay;
-}
-
-  
-
-// Guardar en el mapa del día
-dayMap.set(key, {
-  date: d.date,
-  entrada: d.entradaMin,
-  salida:  d.salidaMax,
-  worked,
-  within,
-  late,
-  excess: excessDay,
-  defect: defectDay,     //  para leerlo en el modal
-  weekend: d.weekend,
-  holiday: d.holiday,
-  neutral: d.neutral,
-  vacation: isVacFinal,
-  type,
-  missing,
-  rawInc: d.rawInc.filter(Boolean).join(' · '),
-  incCodes: [...d.incCodes],
-  vacCat: d.vacCat
-});
- 
-  
-  
-}
-
-
-  // saldos por categoría y totales
+  // Saldos
   const left = {
     VAC: Math.max(0, pools.VAC - spent.VAC),
     PUE: Math.max(0, pools.PUE - spent.PUE),
@@ -757,115 +743,103 @@ dayMap.set(key, {
     CEX: Math.max(0, pools.CEX - spent.CEX),
   };
   const vacSpentTotal = spent.VAC + spent.PUE + spent.ASP + spent.CAN + spent.CEX;
-  const vacLeft       = Math.max(0, (pools.VAC + pools.PUE + pools.ASP + pools.CAN + pools.CEX) - vacSpentTotal);
-// ================= KPIs & RESTANTES =================
+  const vacLeft = Math.max(0, (pools.VAC + pools.PUE + pools.ASP + pools.CAN + pools.CEX) - vacSpentTotal);
 
-// Helpers de formato (defínelos una sola vez)
-if (typeof WORKDAY_MIN === 'undefined') {
-  var WORKDAY_MIN = 7.5 * 60; // 7h30
-}
-if (typeof minutesToDays !== 'function') {
-  function minutesToDays(min){ return (min / WORKDAY_MIN).toFixed(1); }
-}
-if (typeof setMinAndHours !== 'function') {
-  function setMinAndHours(elId, min){
-    const el = document.getElementById(elId);
-    if (!el) return;
-    const sign = min < 0 ? '-' : '';
-    const abs  = Math.abs(min);
-    el.textContent = `${sign}${abs} min (${sign}${fromMinutes(abs)} h)`;
+  // KPIs visibles
+  if (typeof WORKDAY_MIN === 'undefined') var WORKDAY_MIN = DAILY_MAX;
+  if (typeof minutesToDays !== 'function')
+    function minutesToDays(min){ return (min / WORKDAY_MIN).toFixed(1); }
+  if (typeof setMinAndHours !== 'function')
+    function setMinAndHours(elId, min){
+      const el = document.getElementById(elId);
+      if (!el) return;
+      const sign = min < 0 ? '-' : '';
+      const abs  = Math.abs(min);
+      el.textContent = `${sign}${abs} min (${sign}${fromMinutes(abs)} h)`;
+    }
+
+  document.getElementById('ident').textContent = `Nombre: ${NAME} · Periodo: ${PERIOD}`;
+  document.getElementById('k_vac').textContent      = `${vacSpentTotal} días`;
+  document.getElementById('k_vac_left').textContent = `${vacLeft} días`;
+  document.getElementById('k_days').textContent     = `${workedDays}`;
+  document.getElementById('k_hours').textContent    =
+    `${fromMinutes(totalWithinMin)} (${minutesToDays(totalWithinMin)} días)`;
+
+  setMinAndHours('k_late',     lateTotalMin);
+  setMinAndHours('k_overtime', overtimeTotalMin);
+  setMinAndHours('k_deficit',  deficitTotalMin);
+  document.getElementById('k_missing').textContent = `${missingDaysTotal}`;
+
+  // Restantes
+  const today = new Date();
+  const until = new Date(YEAR, 11, 31);
+  const stillWorkday = (d) => !(isWeekend(d) || HOLIDAYS(YEAR).has(fmtDMY(d)));
+
+  let daysLeft = 0;
+  for (let d = new Date(today.getFullYear()===YEAR ? today : new Date(YEAR,0,1));
+       d <= until; d.setDate(d.getDate()+1)) {
+    const dd = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    if (dd.getFullYear() !== YEAR) continue;
+    if (stillWorkday(dd)) daysLeft++;
   }
-}
+  const hoursLeftMin = daysLeft * WORKDAY_MIN;
 
-// Identidad
-document.getElementById('ident').textContent = `Nombre: ${NAME} · Periodo: ${PERIOD}`;
+  const totalVacPending = left.VAC + left.PUE + left.ASP + left.CAN + left.CEX;
+  const realDaysLeft = Math.max(0, daysLeft - totalVacPending);
 
-// Vacaciones gastadas y pendientes (totales)
-document.getElementById('k_vac').textContent      = `${vacSpentTotal} días`;
-document.getElementById('k_vac_left').textContent = `${vacLeft} días`;
+  document.getElementById('k_days_left').textContent  = `${daysLeft} (${realDaysLeft} reales)`;
+  document.getElementById('k_hours_left').textContent = `${fromMinutes(hoursLeftMin)} (${minutesToDays(hoursLeftMin)} días)`;
 
-// Días trabajados
-document.getElementById('k_days').textContent = `${workedDays}`;
-
-// Horas reales trabajadas (EN HORARIO) + días equivalentes
-document.getElementById('k_hours').textContent =
-  `${fromMinutes(totalWithinMin)} (${minutesToDays(totalWithinMin)} días)`;
-
-// Minutos acumulados con conversión a horas
-setMinAndHours('k_late',     lateTotalMin);
-setMinAndHours('k_overtime', overtimeTotalMin);
-setMinAndHours('k_deficit',  deficitTotalMin);
-
-// Días con falta de fichaje
-document.getElementById('k_missing').textContent = `${missingDaysTotal}`;
-
-// Días/horas restantes hasta 31/12 (laborables sin festivo oficial)
-const today = new Date();
-const until = new Date(YEAR, 11, 31);
-const stillWorkday = (d) => !(isWeekend(d) || HOLIDAYS(YEAR).has(fmtDMY(d)));
-
-let daysLeft = 0;
-for (let d = new Date(today.getFullYear()===YEAR ? today : new Date(YEAR,0,1));
-     d <= until; d.setDate(d.getDate()+1)) {
-  const dd = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  if (dd.getFullYear() !== YEAR) continue;
-  if (stillWorkday(dd)) daysLeft++;
-}
-const hoursLeftMin = daysLeft * WORKDAY_MIN;
-
-// DÍAS REALES RESTANTES = laborables restantes − vacaciones pendientes (todas las categorías)
-const totalVacPending = (typeof left === 'object')
-  ? (left.VAC + left.PUE + left.ASP + left.CAN + left.CEX)
-  : Math.max(0, vacLeft); // fallback si no existe 'left'
-
-const realDaysLeft = Math.max(0, daysLeft - totalVacPending);
-
-// Mostrar días restantes (con reales) y horas restantes (con días equivalentes)
-document.getElementById('k_days_left').textContent  = `${daysLeft} (${realDaysLeft} reales)`;
-document.getElementById('k_hours_left').textContent = `${fromMinutes(hoursLeftMin)} (${minutesToDays(hoursLeftMin)} días)`;
-
-// Saldo acumulado total = excesos − déficits − retrasos
-const saldoTotalMin = overtimeTotalMin - deficitTotalMin - lateTotalMin;
-setMinAndHours('k_saldo', saldoTotalMin);
-
-// ---------------- Renderizados ----------------
-renderTable(Array.from(dayMap.values()));
-renderYear(dayMap);
-renderChart(dayMap);             // línea de horas (usa within)
-renderVacBreakdown(spent, left); // barras gastado vs restante
-
-// Exponer dayMap para exportación CSV
-window.__DAYMAP = dayMap;
-
-// --- NUEVA TARJETA: saldo acumulado total ---
-const saldoBox = document.getElementById('k_saldo');
-if (saldoBox) {
+  const saldoTotalMin = overtimeTotalMin - deficitTotalMin - lateTotalMin;
   setMinAndHours('k_saldo', saldoTotalMin);
+
+  // Render
+  renderTable(Array.from(dayMap.values()));
+  renderYear(dayMap);
+  renderChart(dayMap);
+  renderVacBreakdown(spent, left);
+
+  window.__DAYMAP = dayMap;
+  const saldoBox = document.getElementById('k_saldo');
+  if (saldoBox) setMinAndHours('k_saldo', saldoTotalMin);
 }
 
 
 
 
-  window.__DAYMAP = dayMap; // para exportCsvFromCurrent()
 
-  
+
+function getParams(){
+  const num = id => {
+    const el = document.getElementById(id);
+    return el ? (+el.value || 0) : 0;
+  };
+  const hhmm = id => {
+    const el = document.getElementById(id);
+    if (!el || !el.value) return null;
+    const [h,m] = el.value.split(':').map(Number);
+    return h*60 + m;
+  };
+  return {
+    p_can: num('p_can'),
+    p_ap : num('p_ap'),
+    p_vac: num('p_vac'),
+    p_pue: num('p_pue'),
+    p_asp: num('p_asp'),
+    p_baj: num('p_baj'),
+
+    // horario
+    in_start:  hhmm('h_in_start')  ?? 7*60,
+    in_limit:  hhmm('h_in_limit')  ?? (8*60+30),
+    out_start: hhmm('h_out_start') ?? 14*60,
+    out_end:   hhmm('h_out_end')   ?? 16*60,
+  };
 }
 
-
-
-
-
-  function getParams(){
-    return {
-      p_can: +document.getElementById('p_can').value||0,
-      p_ap:  +document.getElementById('p_ap').value||0,
-      p_vac: +document.getElementById('p_vac').value||0,
-      p_pue: +document.getElementById('p_pue').value||0,
-      p_asp: +document.getElementById('p_asp').value||0,
-      p_baj: +document.getElementById('p_baj').value||0,
-    };
-  }
-  ['p_can','p_ap','p_vac','p_pue','p_asp','p_baj'].forEach(id=>{ document.getElementById(id).addEventListener('change', ()=>RAW.length && computeAndRender()); });
+['p_can','p_ap','p_vac','p_pue','p_asp','p_baj'].forEach(id=>{
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', ()=> RAW.length && computeAndRender());
+});
 
   // ========= Tabla =========
  
@@ -911,7 +885,7 @@ function renderTable(items){
   if (showMiss) data = data.filter(o => o.missing && o.missing!=='none');
 
   // acumulados
-  let cumWithin = 0;  // horas (en horario)
+  let cumWithin = 0;  // horas (en horario) acumuladas
   let cumSaldo  = 0;  // exceso - déficit - retraso acumulado
 
   const rows = data
@@ -920,13 +894,11 @@ function renderTable(items){
       // presencia total
       const presencia = fromMinutes(o.worked || 0);
 
-      // minutos dentro del horario laboral
-      const withinMin = (typeof o.within === 'number')
-        ? o.within
-        : computeWithinScheduleMinutes(o.entrada, o.salida);
+      // minutos dentro del horario laboral (forzando 7h30 en 82/8V)
+      const withinMin = getWithinOrNeutral(o);
       const withinTxt = fromMinutes(withinMin);
 
-      // solo trabajados reales
+      // solo trabajados reales → déficit y exceso
       let defectMin = 0;
       if (o.type === 'worked' && hasRealFichaje(o)) {
         defectMin = computeDayDeficit(o.entrada, o.salida, o.late || 0);
@@ -938,7 +910,7 @@ function renderTable(items){
             : computeDayExcess(o.entrada, o.salida))
         : 0;
 
-      // exceso con signo (sin retraso)
+      // exceso con signo (sin retraso) para pintar
       const signedExcess = (o.type === 'worked' && hasRealFichaje(o))
         ? withinMin - (7.5 * 60)
         : 0;
@@ -948,11 +920,15 @@ function renderTable(items){
             ? `${signedExcess}m`
             : `<span style="color:#ef4444">-${Math.abs(signedExcess)}m</span>`);
 
-      // acumulados (solo días trabajados reales)
+      // ===== acumulados por fila =====
       if (o.type==='worked' && hasRealFichaje(o)){
+        // días trabajados normales: suman horas reales + afectan saldo
         cumWithin += withinMin;
         const saldoDia = (excessPos || 0) - (defectMin || 0) - (o.late || 0);
         cumSaldo += saldoDia;
+      } else if (isNeutralWorkDay(o)) {
+        // neutrales 82/8V: suman 7h30 a Horas acum., NO tocan saldo
+        cumWithin += withinMin; // withinMin ya vale 450 aquí
       }
 
       // retraso
@@ -1158,31 +1134,37 @@ function renderChart(dayMap){
   let cumObj  = 0;   // objetivo teórico
   const labels = [], real = [], obj = [];
 
-  sorted.forEach(o=>{
-    labels.push(fmtDMY(o.date));
 
-    // Objetivo sube solo en laborables no festivos/neutros/vacaciones
-    const isWorkday = !(o.weekend || o.holiday || o.vacation || o.type==='neutral');
-    if (isWorkday) cumObj += 7.5*60;
 
-    // Minutos en horario del día (si no viene guardado, calcúlalo al vuelo)
-    const withinMin = (typeof o.within === 'number')
-      ? o.within
-      : computeWithinScheduleMinutes(o.entrada, o.salida);
 
-    if (o.type === 'worked') cumReal += withinMin;
 
-    real.push(cumReal/60);
-    obj.push(cumObj/60);
-  });
+sorted.forEach(o=>{
+  labels.push(fmtDMY(o.date));
 
-  if(chart) chart.destroy();
+  const isWorkday = !(o.weekend || o.holiday || o.vacation || o.type === 'neutral');
+  if (isWorkday) cumObj += DAILY_MAX;
+
+  const withinMin = getWithinOrNeutral(o);
+
+  if (o.type === 'worked' || isNeutralWorkDay(o)) {
+    cumReal += withinMin;
+  }
+
+  real.push(cumReal/60);
+  obj.push(cumObj/60);
+});
+
+
+  if (chart) chart.destroy();
   chart = new Chart(ctx, {
     type:'line',
-    data:{ labels, datasets:[
-      { label:'Horas reales acumuladas (en horario)', data:real, tension:.25, borderWidth:1, pointRadius:1.5 },
-      { label:'Horas objetivo acumuladas', data:obj, tension:.25, borderDash:[4,4], borderWidth:1, pointRadius:1.5 }
-    ]},
+    data:{
+      labels,
+      datasets:[
+        { label:'Horas reales acumuladas (en horario)', data:real, tension:.25, borderWidth:1, pointRadius:1.5 },
+        { label:'Horas objetivo acumuladas', data:obj, tension:.25, borderDash:[4,4], borderWidth:1, pointRadius:1.5 }
+      ]
+    },
     options:{
       responsive:true, maintainAspectRatio:false,
       plugins:{
@@ -1199,6 +1181,7 @@ function renderChart(dayMap){
     }
   });
 }
+
 
 
 
@@ -1341,7 +1324,7 @@ function buildMonthSummaryHtml(m, dayMap){
 const CLIP_START = 7*60;     // 07:00
 const CLIP_END   = 16*60;    // 16:00
 
-const DAILY_MAX = 7.5*60; // 7h30
+
 
 function computeWithinScheduleMinutes(entradaMin, salidaMin){
   const { in_start, out_end } = getParams();
@@ -1375,29 +1358,6 @@ function hhmmToMin(v){
   return parseInt(m[1],10)*60 + parseInt(m[2],10);
 }
 
-// Extiende getParams con el horario
-function getParams(){
-  return {
-    p_can: +document.getElementById('p_can').value||0,
-    p_ap:  +document.getElementById('p_ap').value||0,
-    p_vac: +document.getElementById('p_vac').value||0,
-    p_pue: +document.getElementById('p_pue').value||0,
-    p_asp: +document.getElementById('p_asp').value||0,
-    p_baj: +document.getElementById('p_baj').value||0,
-    // horario
-    in_start:  hhmmToMin(document.getElementById('h_in_start').value)  ?? 7*60,
-    in_limit:  hhmmToMin(document.getElementById('h_in_limit').value)  ?? 8*60+30,
-    out_start: hhmmToMin(document.getElementById('h_out_start').value) ?? 14*60,
-    out_end:   hhmmToMin(document.getElementById('h_out_end').value)   ?? 16*60,
-  };
-}
-
-// Recalcular al cambiar horario
-['h_in_start','h_in_limit','h_out_start','h_out_end'].forEach(id=>{
-  const el = document.getElementById(id);
-  if(el) el.addEventListener('change', ()=>RAW.length && computeAndRender());
-});
-
 
 
 
@@ -1412,12 +1372,32 @@ function exportCsvFromCurrent(){
 
   const rows = Array.from(dayMap.values()).sort((a,b)=>a.date-b.date);
 
+  // === Helpers locales ===
+ 
+
+  function isNeutralWorkDay(o){
+    const inc = Array.isArray(o.incCodes) ? o.incCodes.map(String) : [];
+    // neutral que debe computar horas reales (82 y 8V)
+    return o.type === 'neutral' && (inc.includes('82') || inc.includes('8V'));
+  }
+
+  function getWithinOrNeutral(o){
+    // usa el valor guardado; si no, calcula con entrada/salida
+    let within = (typeof o.within === 'number')
+      ? o.within
+      : (o.entrada!=null && o.salida!=null
+          ? computeWithinScheduleMinutes(o.entrada, o.salida)
+          : 0);
+    // forzar 7h30 en neutrales 82/8V
+    if (isNeutralWorkDay(o)) within = DAILY_MAX;
+    return within;
+  }
+
   // Config CSV: coma y CRLF; comillas solo si hace falta
   const SEP = ','; 
   const NL  = '\r\n';
   const escMinimal = (v) => {
     const s = (v==null ? '' : String(v)).normalize('NFC').replace(/\r?\n/g, ' ');
-    // Si contiene coma, comillas o salto, encerramos y duplicamos comillas
     if (/[",]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
     return s;
   };
@@ -1433,18 +1413,24 @@ function exportCsvFromCurrent(){
   ].join(SEP));
 
   rows.forEach(o=>{
-    const within = (typeof o.within === 'number') ? o.within : computeWithinScheduleMinutes(o.entrada, o.salida);
+    const within = getWithinOrNeutral(o);
     const late   = o.late || 0;
-    const excess = (typeof o.excess === 'number') ? o.excess : computeDayExcess(o.entrada, o.salida);
+    const excess = (typeof o.excess === 'number')
+      ? o.excess
+      : (o.entrada!=null && o.salida!=null ? computeDayExcess(o.entrada, o.salida) : 0);
     const defect = (o.type==='worked')
       ? ((typeof o.defect === 'number') ? o.defect : computeDayDeficit(o.entrada, o.salida, late))
       : 0;
 
-    if(o.type==='worked'){
+    // Acumulados: días trabajados normales + neutrales 82/8V (solo horas reales)
+    if (o.type==='worked') {
       cumHours += within;
       cumLate  += late;
       cumEx    += excess;
       cumDef   += defect;
+    } else if (isNeutralWorkDay(o)) {
+      cumHours += DAILY_MAX; // suman 7h30 a horas reales
+      // no suman late/exceso/déficit
     }
 
     // Código + descripción (o FESTIVO)
@@ -1453,8 +1439,9 @@ function exportCsvFromCurrent(){
       codeTxt = 'FESTIVO';
     } else if (o.incCodes && o.incCodes.length) {
       codeTxt = o.incCodes.map(c=>{
-        const desc = CODE_MAP[c] || '';
-        return desc ? `${c} - ${desc}` : c;
+        const k = String(c);
+        const desc = CODE_MAP[k] || '';
+        return desc ? `${k} - ${desc}` : k;
       }).join(' | ');
     }
 
@@ -1474,7 +1461,7 @@ function exportCsvFromCurrent(){
     ].join(SEP));
   });
 
-  // UTF-8 con BOM para que Excel respete los acentos al abrir directo
+  // UTF-8 con BOM para que Excel respete acentos
   const csv = '\uFEFF' + out.join(NL);
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
@@ -1506,4 +1493,3 @@ function exportCsvFromCurrent(){
   </script>
 </body>
 </html>
-
