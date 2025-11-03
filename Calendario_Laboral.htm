@@ -144,6 +144,9 @@
 		<div class="box"><label>Días con falta de fichaje</label><b id="k_missing">0</b></div>
 		  <div class="box"><label>Déficit acumulado</label><b id="k_deficit">0 min</b></div>
 		  <div class="box"><label>Saldo acumulado</label><b id="k_saldo">0 min</b></div>
+		  <div class="box"><label>Horas totales + vacaciones</label><b id="k_hours_plus_vac"></b></div>
+
+		  
 		  
         </div>
         <div style="margin-top:10px">
@@ -229,7 +232,7 @@
         <br>2) Ajusta si quieres los parámetros de vacaciones y el horario laboral.<br>
          3) Revisa el resumen y el calendario. Haz clic en un día o en el nombre de un mes para ver detalles.</p>
       <p><b>Notas</b>: Las horas se computan solo dentro del horario laboral configurado.
-         Si tienes permisos parciales por horas o cosas raras eso no lo he tenido en cuenta.</p>
+         Si tienes dobles fichajes en un mismo día (permisos parciales por horas) o cosas raras eso no lo he tenido en cuenta.</p>
 		 <p>El Excel de fichajes que saca el Ayuntamiento es una basura desestructurada y por tanto en algunos casos podría hacer cosas raras.</p>
 		 
 		 <p>Cualquier sugerencia la puedes mandar a <a href="mailto:ounzueta@vitoria-gasteiz.org">ounzueta@vitoria-gasteiz.org</a></p>
@@ -772,6 +775,12 @@ function computeAndRender(){
   document.getElementById('k_days').textContent     = `${workedDays}`;
   document.getElementById('k_hours').textContent    =
     `${fromMinutes(totalWithinMin)} (${minutesToDays(totalWithinMin)} días)`;
+	
+	// === NUEVO KPI: Horas reales + vacaciones gastadas ===
+const totalHoursPlusVac = totalWithinMin + vacSpentTotal * WORKDAY_MIN;
+document.getElementById('k_hours_plus_vac').textContent =
+  `${fromMinutes(totalHoursPlusVac)} (${minutesToDays(totalHoursPlusVac)} días)`;
+
 
   setMinAndHours('k_late',     lateTotalMin);
   setMinAndHours('k_overtime', overtimeTotalMin);
