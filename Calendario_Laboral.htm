@@ -420,135 +420,234 @@ document.getElementById('modalHelp').addEventListener('click', (e)=>{
 
 
   // ========= Parser robusto (con fusión de filas y detección de martes) =========
-  function parseRows(rows){
-    let headerIdx = rows.findIndex(r => r.some(c => String(c).toUpperCase().includes('FECHA')));
-    if (headerIdx === -1) headerIdx = 0;
+ function parseRows(rows){
+  let headerIdx = rows.findIndex(r => r?.some(c => String(c).toUpperCase().includes('FECHA')));
+  if (headerIdx === -1) headerIdx = 0;
 
-    const header = rows[headerIdx].map(c => String(c).trim());
-    const findIdx = (cands) => { const H = header.map(h => h.toUpperCase()); for (const cand of cands){ const i = H.findIndex(h => h.includes(cand)); if (i !== -1) return i; } return -1; };
-    const cFecha     = findIdx(['FECHA']);
-    const cEntrada   = findIdx(['ENTRADA','ENTRA']);
-    const cSalida    = findIdx(['SALIDA','SALID']);
-    const cTrabajada = findIdx(['TRABAJADA','TRABAJ','TOTAL DÍA','TOTAL DIA','TOTAL']);
-    const cIncid     = findIdx(['INCID','INCIDENCIA','INC']);
+  const header = rows[headerIdx].map(c => String(c).trim());
+  const findIdx = (cands) => {
+    const H = header.map(h => h.toUpperCase());
+    for (const cand of cands){
+      const i = H.findIndex(h => h.includes(cand));
+      if (i !== -1) return i;
+    }
+    return -1;
+  };
+  const cFecha     = findIdx(['FECHA']);
+  const cEntrada   = findIdx(['ENTRADA','ENTRA']);
+  const cSalida    = findIdx(['SALIDA','SALID']);
+  const cTrabajada = findIdx(['TRABAJADA','TRABAJ','TOTAL DÍA','TOTAL DIA','TOTAL']);
+  const cIncid     = findIdx(['INCID','INCIDENCIA','INC']);
 
-    const parseExcelDate = (cell) => {
-      if (cell == null || cell === '') return null;
-      if (typeof cell === 'number') { const pd = XLSX.SSF.parse_date_code(cell); return new Date(Date.UTC(pd.y, pd.m-1, pd.d)); }
-      const s = String(cell).replace(/^[a-zA-Zñéáíóúç.()\s]*/, '').trim();
-      const m = s.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-      if (m) return new Date(parseInt(m[3],10), parseInt(m[2],10)-1, parseInt(m[1],10));
-      const t = Date.parse(s); return isNaN(t) ? null : new Date(t);
-    };
-    const numOrNull = (min) => (min!=null && min>0) ? min : null;
-    const normEnt = (row) => numOrNull(toMinutes(row?.[cEntrada]));
-    const normSal = (row) => numOrNull(toMinutes(row?.[cSalida]));
-    const hasTimes = (row) => { const e=toMinutes(row?.[cEntrada]), s=toMinutes(row?.[cSalida]), w=toMinutes(row?.[cTrabajada]); return (e!=null && e>0)||(s!=null && s>0)||(w!=null && w>0); };
-    const normWorked = (row, ent, sal) => { const w=toMinutes(row?.[cTrabajada]); if (w!=null && w>0) return w; if (ent!=null && sal!=null) return Math.max(0, sal-ent); return 0; };
-    const hasInc = (row) => { const t=rowText(row); if(!t) return false; if(extractIncCodes(t).length) return true; return /(VACACION|PUENTE|ASUNTOS|PARTICULARES|TRIENIOS|CANOSOS|PERMISO|VIAJES|ADICIONALES|LIB[-\s]?EUS)/i.test(t); };
+  const parseExcelDate = (cell) => {
+    if (cell == null || cell === '') return null;
+    if (typeof cell === 'number') {
+      const pd = XLSX.SSF.parse_date_code(cell);
+      return new Date(Date.UTC(pd.y, pd.m-1, pd.d));
+    }
+    const s = String(cell).replace(/^[a-zA-Zñéáíóúç.()\s]*/, '').trim();
+    const m = s.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    if (m) return new Date(parseInt(m[3],10), parseInt(m[2],10)-1, parseInt(m[1],10));
+    const t = Date.parse(s); return isNaN(t) ? null : new Date(t);
+  };
 
-    RAW = [];
-    let i = headerIdx + 1;
-    while (i < rows.length) {
-      const r = rows[i]; if(!r || r.length===0){ i++; continue; }
-      const dThis = parseExcelDate(r[cFecha]);
+  const numOrNull = (min) => (min!=null && min>0) ? min : null;
+  const normEnt = (row) => numOrNull(toMinutes(row?.[cEntrada]));
+  const normSal = (row) => numOrNull(toMinutes(row?.[cSalida]));
+  const hasTimes = (row) => {
+    const e=toMinutes(row?.[cEntrada]), s=toMinutes(row?.[cSalida]), w=toMinutes(row?.[cTrabajada]);
+    return (e!=null && e>0)||(s!=null && s>0)||(w!=null && w>0);
+  };
+  const normWorked = (row, ent, sal) => {
+    const w=toMinutes(row?.[cTrabajada]);
+    if (w!=null && w>0) return w;
+    if (ent!=null && sal!=null) return Math.max(0, sal-ent);
+    return 0;
+  };
+  const hasInc = (row) => {
+    const t=rowText(row); if(!t) return false;
+    if (extractIncCodes(t).length) return true;
+    return /(VACACION|PUENTE|ASUNTOS|PARTICULARES|TRIENIOS|CANOSOS|PERMISO|VIAJES|ADICIONALES|LIB[-\s]?EUS)/i.test(t);
+  };
 
-      // CASO 1: fila superior con horas/incidencia y la siguiente es la fecha
-      if (!dThis && (hasTimes(r) || hasInc(r)) && i+1 < rows.length) {
-        const rDate = rows[i+1]; const dNext = parseExcelDate(rDate?.[cFecha]);
-        if (dNext) {
-          const ent = normEnt(r); const sal = normSal(r); const worked = normWorked(r, ent, sal);
-          const rBelow = rows[i+2] || [];
-          const incCell = (cIncid>=0) ? (r[cIncid] || rDate[cIncid] || rBelow[cIncid]) : '';
-          const mergedText = [rowText(r), rowText(rDate), rowText(rBelow)].filter(Boolean).join(' ');
-          const codesSet = new Set([
-  ...extractIncCodes(incCell || mergedText),
-  ...extractIncCodes(r),         // <-- fila superior (puede tener “8D” en col. B)
-  ...extractIncCodes(rDate),     // <-- fila de la fecha
-  ...extractIncCodes(rBelow)     // <-- fila siguiente por si es martes/total
-]);
-const codes = [...codesSet];
+  // --------- NUEVO: soporte "martes partido" ----------
+  const isHeaderRow = (row) => row && row.some(c => String(c).toUpperCase().includes('FECHA'));
+  const isInfoRow   = (row) => row && /CENTRO|DIRECCI[ÓO]N|DEPARTAMENTO|TOTAL\s*D[ÍI]A|T=\s*HORA/i.test(rowText(row)||'');
+  const isWeekdayAbbrev = (cell) => /^\s*(lu\.|ma\.|mi\.|ju\.|vi\.|s[áa]\.|do\.)\s*$/i.test(String(cell||'').trim());
+  const isMaAbbrev      = (cell) => /^\s*ma\.\s*$/i.test(String(cell||'').trim());
+  const MAX_GAP = 30; // filas máximas entre "ma." con horas y la fecha real del martes
 
-          RAW.push({
-            date: new Date(dNext.getFullYear(), dNext.getMonth(), dNext.getDate()),
-            entrada: ent, salida: sal, worked,
-            incidencia: incCell || mergedText, incCodes: codes
-          });
-          i += 2; continue;
-        }
-      }
+  let pendingTuesday = null; // { idx,row,ent,sal,worked,incText,incCodes[] }
+  // -----------------------------------------------------
 
-      // CASO 2: fecha aquí, info en la fila superior
-      if (dThis && !(hasTimes(r) || hasInc(r)) && i-1 >= (headerIdx+1)) {
-        const rUp = rows[i-1]; const dUp = parseExcelDate(rUp?.[cFecha]);
-        if (!dUp && (hasTimes(rUp) || hasInc(rUp))) {
-          const ent = normEnt(rUp); const sal = normSal(rUp); const worked = normWorked(rUp, ent, sal);
-          const rBelow = rows[i+1] || [];
-          const incCell = (cIncid>=0) ? (rUp[cIncid] || r[cIncid] || rBelow[cIncid]) : '';
-          const mergedText = [rowText(rUp), rowText(r), rowText(rBelow)].filter(Boolean).join(' ');
-          const codesSet = new Set([
-  ...extractIncCodes(incCell || mergedText),
-  ...extractIncCodes(rUp),
-  ...extractIncCodes(r),
-  ...extractIncCodes(rBelow)
-]);
-const codes = [...codesSet];
+  RAW = [];
+  let i = headerIdx + 1;
 
-          RAW.push({
-            date: new Date(dThis.getFullYear(), dThis.getMonth(), dThis.getDate()),
-            entrada: ent, salida: sal, worked,
-            incidencia: incCell || mergedText, incCodes: codes
-          });
-          i += 1; continue;
-        }
-      }
+  while (i < rows.length) {
+    const r = rows[i]; if(!r || r.length===0){ i++; continue; }
+    const firstCell = (r[0] ?? '').toString();
+    const dThis = parseExcelDate(r[cFecha]);
 
-      // CASO 3: normal (fecha y datos en la misma fila)
-      if (dThis) {
+    // 0) Memoriza "ma." con horas pero SIN fecha
+    if (!dThis && isMaAbbrev(firstCell) && (hasTimes(r) || hasInc(r))) {
+      const ent = normEnt(r); const sal = normSal(r); const worked = normWorked(r, ent, sal);
+      const incCell = (cIncid>=0) ? (r[cIncid] || '') : '';
+      const mergedText = rowText(r);
+      const codesSet = new Set([
+        ...extractIncCodes(incCell || mergedText),
+        ...extractIncCodes(r)
+      ]);
+      pendingTuesday = {
+        idx: i, row: r, ent, sal, worked,
+        incText: incCell || mergedText,
+        incCodes: [...codesSet]
+      };
+      i++; continue;
+    }
+
+    // Si aparece otra abreviatura de día distinta de ma. antes de casar, anula el pending
+    if (!dThis && isWeekdayAbbrev(firstCell) && !isMaAbbrev(firstCell)) {
+      pendingTuesday = null;
+    }
+
+    // CASO 1: fila superior con horas/incidencia y la siguiente es la fecha
+    if (!dThis && (hasTimes(r) || hasInc(r)) && i+1 < rows.length) {
+      const rDate = rows[i+1]; const dNext = parseExcelDate(rDate?.[cFecha]);
+      if (dNext) {
         const ent = normEnt(r); const sal = normSal(r); const worked = normWorked(r, ent, sal);
-        const rBelow = rows[i+1] || [];
-        const incCell = (cIncid>=0) ? (r[cIncid] || rBelow[cIncid]) : '';
-        const mergedText = [rowText(r), rowText(rBelow)].filter(Boolean).join(' ');
+        const rBelow = rows[i+2] || [];
+        const incCell = (cIncid>=0) ? (r[cIncid] || rDate[cIncid] || rBelow[cIncid]) : '';
+        const mergedText = [rowText(r), rowText(rDate), rowText(rBelow)].filter(Boolean).join(' ');
         const codesSet = new Set([
-  ...extractIncCodes(incCell || mergedText),
-  ...extractIncCodes(r),
-  ...extractIncCodes(rBelow)
-]);
-const codes = [...codesSet];
+          ...extractIncCodes(incCell || mergedText),
+          ...extractIncCodes(r),
+          ...extractIncCodes(rDate),
+          ...extractIncCodes(rBelow)
+        ]);
+        const codes = [...codesSet];
+
+        RAW.push({
+          date: new Date(dNext.getFullYear(), dNext.getMonth(), dNext.getDate()),
+          entrada: ent, salida: sal, worked,
+          incidencia: incCell || mergedText, incCodes: codes
+        });
+        i += 2; continue;
+      }
+    }
+
+    // CASO 2: fecha aquí, info en la fila superior
+    if (dThis && !(hasTimes(r) || hasInc(r)) && i-1 >= (headerIdx+1)) {
+      const rUp = rows[i-1]; const dUp = parseExcelDate(rUp?.[cFecha]);
+      if (!dUp && (hasTimes(rUp) || hasInc(rUp))) {
+        const ent = normEnt(rUp); const sal = normSal(rUp); const worked = normWorked(rUp, ent, sal);
+        const rBelow = rows[i+1] || [];
+        const incCell = (cIncid>=0) ? (rUp[cIncid] || r[cIncid] || rBelow[cIncid]) : '';
+        const mergedText = [rowText(rUp), rowText(r), rowText(rBelow)].filter(Boolean).join(' ');
+        const codesSet = new Set([
+          ...extractIncCodes(incCell || mergedText),
+          ...extractIncCodes(rUp),
+          ...extractIncCodes(r),
+          ...extractIncCodes(rBelow)
+        ]);
+        const codes = [...codesSet];
 
         RAW.push({
           date: new Date(dThis.getFullYear(), dThis.getMonth(), dThis.getDate()),
           entrada: ent, salida: sal, worked,
           incidencia: incCell || mergedText, incCodes: codes
         });
+        i += 1; continue;
       }
-      i++;
     }
 
-    // Nombre y periodo
-    try {
-      const headScan = rows.slice(0, 10);
-      for (const r0 of headScan) {
-        if (!Array.isArray(r0)) continue;
-        const j = r0.findIndex(c => String(c).toUpperCase().includes('APELLIDOS'));
-        if (j !== -1) {
-          const val = r0.slice(j+1).find(x => String(x).trim() !== '');
-          if (val) { NAME = String(val).toLowerCase(); break; }
+    // CASO 2.b NUEVO caso de Belen: fecha es martes sin horas aquí porque hay encabezado partiendo ese día → intenta casar con "ma." pendiente arriba
+    if (dThis) {
+      const isTuesday = dThis.getDay() === 2; // 0=Dom,1=Lun,2=Mar
+      const noTimesHere = !(hasTimes(r) || hasInc(r));
+      if (isTuesday && noTimesHere && pendingTuesday && (i - pendingTuesday.idx) <= MAX_GAP) {
+        // verificar que entre medias solo hay encabezados/infos
+        let cleanGap = true;
+        for (let k = pendingTuesday.idx + 1; k < i; k++) {
+          const rk = rows[k];
+          if (!rk) continue;
+          if (isWeekdayAbbrev(rk[0]) || parseExcelDate(rk[cFecha])) { cleanGap = false; break; }
+          if (!(isHeaderRow(rk) || isInfoRow(rk) || (rowText(rk)||'').trim()==='')) { cleanGap = false; break; }
+        }
+        if (cleanGap) {
+          const rBelow = rows[i+1] || [];
+          const incCell = (cIncid>=0) ? (rows[pendingTuesday.idx][cIncid] || r[cIncid] || rBelow[cIncid]) : '';
+          const mergedText = [pendingTuesday.incText, rowText(r), rowText(rBelow)].filter(Boolean).join(' ');
+          const codesSet = new Set([
+            ...(pendingTuesday.incCodes||[]),
+            ...extractIncCodes(incCell || mergedText),
+            ...extractIncCodes(r),
+            ...extractIncCodes(rBelow)
+          ]);
+          const codes = [...codesSet];
+
+          RAW.push({
+            date: new Date(dThis.getFullYear(), dThis.getMonth(), dThis.getDate()),
+            entrada: pendingTuesday.ent,
+            salida:  pendingTuesday.sal,
+            worked:  pendingTuesday.worked,
+            incidencia: incCell || mergedText,
+            incCodes: codes
+          });
+
+          pendingTuesday = null;
+          i += 1; continue;
         }
       }
-    } catch {}
-
-    if (RAW.length) {
-      YEAR = RAW[0].date.getFullYear();
-      if (!PERIOD || PERIOD === '—') {
-        const minD = RAW.reduce((a,b)=> a.date<b.date ? a : b).date;
-        const maxD = RAW.reduce((a,b)=> a.date>b.date ? a : b).date;
-        PERIOD = `${fmtDMY(minD)} - ${fmtDMY(maxD)}`;
-      }
     }
 
-    computeAndRender();
+    // CASO 3: normal (fecha y datos en la misma fila)
+    if (dThis) {
+      const ent = normEnt(r); const sal = normSal(r); const worked = normWorked(r, ent, sal);
+      const rBelow = rows[i+1] || [];
+      const incCell = (cIncid>=0) ? (r[cIncid] || rBelow[cIncid]) : '';
+      const mergedText = [rowText(r), rowText(rBelow)].filter(Boolean).join(' ');
+      const codesSet = new Set([
+        ...extractIncCodes(incCell || mergedText),
+        ...extractIncCodes(r),
+        ...extractIncCodes(rBelow)
+      ]);
+      const codes = [...codesSet];
+
+      RAW.push({
+        date: new Date(dThis.getFullYear(), dThis.getMonth(), dThis.getDate()),
+        entrada: ent, salida: sal, worked,
+        incidencia: incCell || mergedText, incCodes: codes
+      });
+    }
+
+    i++;
   }
+
+  // Nombre y periodo
+  try {
+    const headScan = rows.slice(0, 10);
+    for (const r0 of headScan) {
+      if (!Array.isArray(r0)) continue;
+      const j = r0.findIndex(c => String(c).toUpperCase().includes('APELLIDOS'));
+      if (j !== -1) {
+        const val = r0.slice(j+1).find(x => String(x).trim() !== '');
+        if (val) { NAME = String(val).toLowerCase(); break; }
+      }
+    }
+  } catch {}
+
+  if (RAW.length) {
+    YEAR = RAW[0].date.getFullYear();
+    if (!PERIOD || PERIOD === '—') {
+      const minD = RAW.reduce((a,b)=> a.date<b.date ? a : b).date;
+      const maxD = RAW.reduce((a,b)=> a.date>b.date ? a : b).date;
+      PERIOD = `${fmtDMY(minD)} - ${fmtDMY(maxD)}`;
+    }
+  }
+
+  computeAndRender();
+}
+ 
 
   // ========= Cómputo + render =========
   
